@@ -1,0 +1,16 @@
+﻿# Node modules
+node_modules/
+
+# Credentials clasp
+.clasprc.json
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
