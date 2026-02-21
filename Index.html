@@ -1469,7 +1469,7 @@
       }
       
       function toggleDarkMode() { document.body.classList.toggle('dark-mode'); }
-      function toggleAdmin() { if(!IS_ADM && prompt("Mdp ?")!=="66000") return; IS_ADM=true; document.getElementById('dashboard-view').style.display = 'none'; document.getElementById('admin-view').style.display = 'block'; }
+      function toggleAdmin() { if(!IS_ADM && prompt("Mdp ?")!=="0007") return; IS_ADM=true; document.getElementById('dashboard-view').style.display = 'none'; document.getElementById('admin-view').style.display = 'block'; }
       function backToDashboard() { document.getElementById('admin-view').style.display = 'none'; document.getElementById('dashboard-view').style.display = 'block'; }
       function showTab(id) { 
         document.querySelectorAll('.admin-tab').forEach(e=>e.classList.remove('active')); 
