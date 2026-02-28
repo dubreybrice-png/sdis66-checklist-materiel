@@ -29,19 +29,19 @@ function getAppUrl() {
 
 // --- BOOTSTRAP (data + photos + mileages) with short cache ---
 function getBootstrapData() {
-  const cache = CacheService.getScriptCache();
-  const cached = cache.get("BOOTSTRAP_V1");
-  if (cached) return JSON.parse(cached);
-
-  const snap = SCRIPT_PROP.getProperty(BOOTSTRAP_SNAPSHOT_KEY);
-  if (snap) {
-    cache.put("BOOTSTRAP_V1", snap, 5);
-    return JSON.parse(snap);
+  try {
+    // Toujours reconstruire directement — pas de cache/snapshot pour éviter toute corruption
+    var base = getData();
+    if (!base || !base.success) return base || { success: false, error: "getData returned null" };
+    return {
+      success: true,
+      data: base.data,
+      photoPresence: getPhotoPresenceMap(),
+      vliMileages: getAllVliMileages()
+    };
+  } catch(e) {
+    return { success: false, error: "Erreur serveur: " + e.message };
   }
-
-  const payload = rebuildBootstrapSnapshot_();
-  if (payload) cache.put("BOOTSTRAP_V1", JSON.stringify(payload), 5);
-  return payload;
 }
 
 function rebuildBootstrapSnapshot_() {

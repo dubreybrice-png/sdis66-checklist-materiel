@@ -517,30 +517,36 @@
       };
 
       function fail(e) { 
+        document.getElementById('global-loader').style.display = 'flex';
         document.getElementById('error-box').style.display = 'block'; 
-        document.getElementById('tech-error').innerText = e.message;
+        document.getElementById('tech-error').innerText = (e && e.message) ? e.message : JSON.stringify(e);
       }
 
       function loadData() {
         google.script.run.withSuccessHandler(res => {
-          console.log("getBootstrapData response:", res);
-          if (res && res.success) {
-            D = res.data;
-            D.photoPresence = res.photoPresence || {};
-            D.vliMileages = res.vliMileages || {};
-            render();
+          try {
+            console.log("getBootstrapData response:", res);
+            if (res && res.success) {
+              D = res.data;
+              D.photoPresence = res.photoPresence || {};
+              D.vliMileages = res.vliMileages || {};
+              render();
 
-            if(QR_BAG_PARAM) {
-              const item = D.inventory.find(i => i.name === QR_BAG_PARAM);
-              if(item) {
-                if(item.state === 'HS') alert("Ce bag est marqué Hors Service (HS)");
-                else setTimeout(() => openCheck(item), 300);
-              } else alert("Bag introuvable: " + QR_BAG_PARAM);
-            }
+              if(QR_BAG_PARAM) {
+                const item = D.inventory.find(i => i.name === QR_BAG_PARAM);
+                if(item) {
+                  if(item.state === 'HS') alert("Ce bag est marqué Hors Service (HS)");
+                  else setTimeout(() => openCheck(item), 300);
+                } else alert("Bag introuvable: " + QR_BAG_PARAM);
+              }
 
-            clearTimeout(loaderTimeout);
-            document.getElementById('global-loader').style.display = 'none';
-          } else { fail({message: res ? res.error : "Pas de réponse du serveur"}); }
+              clearTimeout(loaderTimeout);
+              document.getElementById('global-loader').style.display = 'none';
+            } else { fail({message: res ? (res.error || "Réponse invalide") : "Pas de réponse du serveur"}); }
+          } catch(renderErr) {
+            console.error("loadData error:", renderErr);
+            fail({message: "Erreur rendu: " + renderErr.message});
+          }
         }).withFailureHandler(fail).getBootstrapData();
       }
 
