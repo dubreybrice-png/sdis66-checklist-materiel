@@ -29,50 +29,32 @@ function getAppUrl() {
 
 // --- BOOTSTRAP (data + photos + mileages) with short cache ---
 function getBootstrapData() {
-  try {
-    // Toujours reconstruire directement pour éviter tout problème de cache/snapshot corrompu
-    var base = getData();
-    if (!base || !base.success) return base || { success: false, error: "getData returned null" };
-    var payload = {
-      success: true,
-      data: base.data,
-      photoPresence: getPhotoPresenceMap(),
-      vliMileages: getAllVliMileages()
-    };
-    // Sauver le snapshot en background (best effort)
-    try {
-      var json = JSON.stringify(payload);
-      var cache = CacheService.getScriptCache();
-      SCRIPT_PROP.setProperty(BOOTSTRAP_SNAPSHOT_KEY, json);
-      try { cache.put("BOOTSTRAP_V1", json, 5); } catch(e) {}
-    } catch(e) { Logger.log("Snapshot save failed: " + e); }
-    return payload;
-  } catch(e) {
-    Logger.log("getBootstrapData FATAL: " + e.toString());
-    return { success: false, error: "Erreur serveur: " + e.message };
+  const cache = CacheService.getScriptCache();
+  const cached = cache.get("BOOTSTRAP_V1");
+  if (cached) return JSON.parse(cached);
+
+  const snap = SCRIPT_PROP.getProperty(BOOTSTRAP_SNAPSHOT_KEY);
+  if (snap) {
+    cache.put("BOOTSTRAP_V1", snap, 5);
+    return JSON.parse(snap);
   }
+
+  const payload = rebuildBootstrapSnapshot_();
+  if (payload) cache.put("BOOTSTRAP_V1", JSON.stringify(payload), 5);
+  return payload;
 }
 
 function rebuildBootstrapSnapshot_() {
-  try {
-    const base = getData();
-    if (!base || !base.success) return base;
-    const payload = {
-      success: true,
-      data: base.data,
-      photoPresence: getPhotoPresenceMap(),
-      vliMileages: getAllVliMileages()
-    };
-    try {
-      SCRIPT_PROP.setProperty(BOOTSTRAP_SNAPSHOT_KEY, JSON.stringify(payload));
-    } catch(e) {
-      Logger.log("Snapshot too large for ScriptProperties: " + e.toString());
-    }
-    return payload;
-  } catch(e) {
-    Logger.log("rebuildBootstrapSnapshot_ error: " + e.toString());
-    return { success: false, error: "Erreur rebuild: " + e.message };
-  }
+  const base = getData();
+  if (!base || !base.success) return base;
+  const payload = {
+    success: true,
+    data: base.data,
+    photoPresence: getPhotoPresenceMap(),
+    vliMileages: getAllVliMileages()
+  };
+  SCRIPT_PROP.setProperty(BOOTSTRAP_SNAPSHOT_KEY, JSON.stringify(payload));
+  return payload;
 }
 
 // --- INITIALISATION ---
@@ -81,14 +63,13 @@ function setup() {
   
   if (!ss.getSheetByName(SHEET_NAMES.INVENTORY)) {
     const s = ss.insertSheet(SHEET_NAMES.INVENTORY);
-    s.appendRow(["Catégorie", "Nom", "Dernier_Controle", "Prochain_Controle", "Statut", "Dernier_Verificateur", "Prochain_Item_Nom", "Prochain_Item_Date", "Mail_Orange", "Mail_Red", "Etat", "Localisation", "Ordre", "SousType"]);
+    s.appendRow(["Catégorie", "Nom", "Dernier_Controle", "Prochain_Controle", "Statut", "Dernier_Verificateur", "Prochain_Item_Nom", "Prochain_Item_Date", "Mail_Orange", "Mail_Red", "Etat", "Localisation", "Ordre"]);
   } else {
     const s = ss.getSheetByName(SHEET_NAMES.INVENTORY);
     const lastCol = Math.max(1, s.getLastColumn());
     const header = s.getRange(1, 1, 1, lastCol).getValues()[0];
     if (header.length < 12 || header[11] !== "Localisation") s.getRange(1, 12).setValue("Localisation");
     if (header.length < 13 || header[12] !== "Ordre") s.getRange(1, 13).setValue("Ordre");
-    if (header.length < 14 || header[13] !== "SousType") s.getRange(1, 14).setValue("SousType");
   }
   
   if (!ss.getSheetByName(SHEET_NAMES.HISTORY)) {
@@ -129,16 +110,6 @@ function getData() {
       Logger.log("initializeForms introuvable: formulaires non rechargés.");
     }
     
-    // Initialiser la checklist VSSO si elle n'existe pas
-    const savedForms0 = SCRIPT_PROP.getProperty("FORMS_JSON");
-    if (savedForms0) {
-      const f0 = JSON.parse(savedForms0);
-      if (!f0['VSSO']) {
-        f0['VSSO'] = [{ section: 'Caisse SSO', position: '', items: [{ name: 'Caisse SSO', type: 'nombre', def: '3' }] }];
-        SCRIPT_PROP.setProperty("FORMS_JSON", JSON.stringify(f0));
-      }
-    }
-    
     // 1. Config
     const confSheet = ss.getSheetByName(SHEET_NAMES.CONFIG);
     const confData = confSheet.getDataRange().getValues();
@@ -175,8 +146,7 @@ function getData() {
         mailRed: row[9],
         state: row[10],
         location: row[11] || "",
-        order: row[12] || "",
-        subType: row[13] || ""
+        order: row[12] || ""
       };
       
       inventory.push(item);
@@ -653,20 +623,7 @@ function addBag(cat, name) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const s = ss.getSheetByName(SHEET_NAMES.INVENTORY);
   const nextOrder = getNextOrder_(s, cat);
-  s.appendRow([cat, name, "", "", "green", "", "", "", "", "", "Actif", "", nextOrder, ""]);
-  invalidateCache_();
-}
-
-function updateBagSubType(bagName, subType) {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const s = ss.getSheetByName(SHEET_NAMES.INVENTORY);
-  const data = s.getDataRange().getValues();
-  for (let i = 1; i < data.length; i++) {
-    if (data[i][1] == bagName) {
-      s.getRange(i + 1, 14).setValue(subType || "");
-      break;
-    }
-  }
+  s.appendRow([cat, name, "", "", "green", "", "", "", "", "", "Actif", "", nextOrder]);
   invalidateCache_();
 }
 
@@ -889,8 +846,7 @@ function updateCategoryContent(catName, dataJson) {
       groups[row.section].items.push({
         name: row.item,
         type: row.type,
-        def: row.def,
-        subsection: row.subsection || ''
+        def: row.def
       });
     }
   });
@@ -1153,7 +1109,7 @@ function saveVliMileage(bagName, km, dateStr) {
 function invalidateCache_() {
   try {
     CacheService.getScriptCache().remove("BOOTSTRAP_V1");
-    SCRIPT_PROP.deleteProperty(BOOTSTRAP_SNAPSHOT_KEY);
+    rebuildBootstrapSnapshot_();
   } catch (e) {
     Logger.log("Cache invalidate error: " + e.toString());
   }
