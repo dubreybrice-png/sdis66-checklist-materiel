@@ -92,8 +92,11 @@ function setup() {
       enablePhotos: true
     }));
   }
-  // Purger le snapshot pour forcer un rebuild avec la nouvelle structure
-  invalidateCache_();
+  // Purger le snapshot pour forcer un rebuild au prochain chargement
+  try {
+    CacheService.getScriptCache().remove("BOOTSTRAP_V1");
+    SCRIPT_PROP.deleteProperty(BOOTSTRAP_SNAPSHOT_KEY);
+  } catch(e) {}
 }
 
 // --- DATA FETCHING (Chargement des données) ---
