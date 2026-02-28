@@ -523,8 +523,9 @@
       };
 
       function fail(e) { 
+        document.getElementById('global-loader').style.display = 'flex';
         document.getElementById('error-box').style.display = 'block'; 
-        document.getElementById('tech-error').innerText = e.message;
+        document.getElementById('tech-error').innerText = (e && e.message) ? e.message : JSON.stringify(e);
       }
 
       function loadData() {
@@ -534,7 +535,7 @@
             D = res.data;
             D.photoPresence = res.photoPresence || {};
             D.vliMileages = res.vliMileages || {};
-            render();
+            try { render(); } catch(renderErr) { console.error("render error:", renderErr); }
 
             if(QR_BAG_PARAM) {
               const item = D.inventory.find(i => i.name === QR_BAG_PARAM);
@@ -546,7 +547,7 @@
 
             clearTimeout(loaderTimeout);
             document.getElementById('global-loader').style.display = 'none';
-          } else { fail({message: res ? res.error : "Pas de réponse du serveur"}); }
+          } else { fail({message: res ? (res.error || "Réponse invalide") : "Pas de réponse du serveur"}); }
         }).withFailureHandler(fail).getBootstrapData();
       }
 

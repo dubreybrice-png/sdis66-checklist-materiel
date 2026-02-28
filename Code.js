@@ -29,32 +29,55 @@ function getAppUrl() {
 
 // --- BOOTSTRAP (data + photos + mileages) with short cache ---
 function getBootstrapData() {
-  const cache = CacheService.getScriptCache();
-  const cached = cache.get("BOOTSTRAP_V1");
-  if (cached) return JSON.parse(cached);
+  try {
+    const cache = CacheService.getScriptCache();
+    const cached = cache.get("BOOTSTRAP_V1");
+    if (cached) {
+      try { return JSON.parse(cached); } catch(e) { /* cache corrompu, on continue */ }
+    }
 
-  const snap = SCRIPT_PROP.getProperty(BOOTSTRAP_SNAPSHOT_KEY);
-  if (snap) {
-    cache.put("BOOTSTRAP_V1", snap, 5);
-    return JSON.parse(snap);
+    const snap = SCRIPT_PROP.getProperty(BOOTSTRAP_SNAPSHOT_KEY);
+    if (snap) {
+      try {
+        const parsed = JSON.parse(snap);
+        if (parsed && parsed.success) {
+          try { cache.put("BOOTSTRAP_V1", snap, 5); } catch(e) { /* trop gros pour cache */ }
+          return parsed;
+        }
+      } catch(e) { /* snapshot corrompu, on rebuild */ }
+    }
+
+    const payload = rebuildBootstrapSnapshot_();
+    if (payload) {
+      try { cache.put("BOOTSTRAP_V1", JSON.stringify(payload), 5); } catch(e) { /* trop gros */ }
+    }
+    return payload;
+  } catch(e) {
+    Logger.log("getBootstrapData FATAL: " + e.toString());
+    return { success: false, error: "Erreur serveur: " + e.message };
   }
-
-  const payload = rebuildBootstrapSnapshot_();
-  if (payload) cache.put("BOOTSTRAP_V1", JSON.stringify(payload), 5);
-  return payload;
 }
 
 function rebuildBootstrapSnapshot_() {
-  const base = getData();
-  if (!base || !base.success) return base;
-  const payload = {
-    success: true,
-    data: base.data,
-    photoPresence: getPhotoPresenceMap(),
-    vliMileages: getAllVliMileages()
-  };
-  SCRIPT_PROP.setProperty(BOOTSTRAP_SNAPSHOT_KEY, JSON.stringify(payload));
-  return payload;
+  try {
+    const base = getData();
+    if (!base || !base.success) return base;
+    const payload = {
+      success: true,
+      data: base.data,
+      photoPresence: getPhotoPresenceMap(),
+      vliMileages: getAllVliMileages()
+    };
+    try {
+      SCRIPT_PROP.setProperty(BOOTSTRAP_SNAPSHOT_KEY, JSON.stringify(payload));
+    } catch(e) {
+      Logger.log("Snapshot too large for ScriptProperties: " + e.toString());
+    }
+    return payload;
+  } catch(e) {
+    Logger.log("rebuildBootstrapSnapshot_ error: " + e.toString());
+    return { success: false, error: "Erreur rebuild: " + e.message };
+  }
 }
 
 // --- INITIALISATION ---
