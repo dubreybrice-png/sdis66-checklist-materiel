@@ -130,7 +130,7 @@
       .photo-badge.no-photo { background-color: #f44336; }
 
       /* MOBILE SPLASH */
-      #splashChoice { position:fixed; top:0; left:0; width:100%; height:100%; z-index:99999; background:linear-gradient(135deg, #0d47a1 0%, #1a237e 100%); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:24px; }
+      #splashChoice { position:fixed; top:0; left:0; width:100%; height:100%; z-index:99999; background:linear-gradient(135deg, #0d47a1 0%, #1a237e 100%); display:none; flex-direction:column; align-items:center; justify-content:center; gap:24px; }
       #splashChoice h2 { color:#fff; font-size:22px; text-align:center; margin:0; }
       #splashChoice p { color:rgba(255,255,255,.7); font-size:13px; margin:0; }
       .splashBtn { width:200px; padding:18px; border-radius:14px; border:2px solid rgba(255,255,255,.3); background:rgba(255,255,255,.08); color:#fff; font-size:17px; font-weight:700; cursor:pointer; transition:all .2s; text-align:center; }
@@ -1685,7 +1685,7 @@
         var s = document.getElementById('modeStrip'); s.style.display='block'; 
         s.innerHTML = m==='mobile' ? '📱 Mobile <a onclick="switchMode(\'desktop\')">Passer en PC</a>' : '💻 PC <a onclick="switchMode(\'mobile\')">Passer en mobile</a>'; 
       }
-      (function(){ var s=localStorage.getItem('checklistMode'); if(s==='mobile'||s==='desktop'){document.getElementById('splashChoice').style.display='none';showModeStrip(s);if(s==='mobile')document.body.classList.add('mobile-mode');} })();
+      (function(){ var s=localStorage.getItem('checklistMode'); if(s==='mobile'||s==='desktop'){showModeStrip(s);if(s==='mobile')document.body.classList.add('mobile-mode');} else {document.getElementById('splashChoice').style.display='flex';} })();
 
       // === VLI IMPACT ===
       let CURR_VLI_NAME = '';
