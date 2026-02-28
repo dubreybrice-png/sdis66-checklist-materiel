@@ -30,29 +30,7 @@ function getAppUrl() {
 // --- BOOTSTRAP (data + photos + mileages) with short cache ---
 function getBootstrapData() {
   try {
-    // Essayer le cache rapide (5s)
-    const cache = CacheService.getScriptCache();
-    try {
-      const cached = cache.get("BOOTSTRAP_V1");
-      if (cached) {
-        var parsed = JSON.parse(cached);
-        if (parsed && parsed.success) return parsed;
-      }
-    } catch(e) { /* cache miss or corrupt */ }
-
-    // Essayer le snapshot persistant
-    try {
-      const snap = SCRIPT_PROP.getProperty(BOOTSTRAP_SNAPSHOT_KEY);
-      if (snap) {
-        var parsed2 = JSON.parse(snap);
-        if (parsed2 && parsed2.success) {
-          try { cache.put("BOOTSTRAP_V1", snap, 5); } catch(e) {}
-          return parsed2;
-        }
-      }
-    } catch(e) { /* snapshot corrupt */ }
-
-    // Rebuild direct — pas de snapshot, retour direct
+    // Toujours reconstruire directement pour éviter tout problème de cache/snapshot corrompu
     var base = getData();
     if (!base || !base.success) return base || { success: false, error: "getData returned null" };
     var payload = {
@@ -64,6 +42,7 @@ function getBootstrapData() {
     // Sauver le snapshot en background (best effort)
     try {
       var json = JSON.stringify(payload);
+      var cache = CacheService.getScriptCache();
       SCRIPT_PROP.setProperty(BOOTSTRAP_SNAPSHOT_KEY, json);
       try { cache.put("BOOTSTRAP_V1", json, 5); } catch(e) {}
     } catch(e) { Logger.log("Snapshot save failed: " + e); }

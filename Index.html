@@ -530,24 +530,38 @@
 
       function loadData() {
         google.script.run.withSuccessHandler(res => {
-          console.log("getBootstrapData response:", res);
-          if (res && res.success) {
-            D = res.data;
-            D.photoPresence = res.photoPresence || {};
-            D.vliMileages = res.vliMileages || {};
-            try { render(); } catch(renderErr) { console.error("render error:", renderErr); }
+          try {
+            console.log("getBootstrapData response:", res);
+            if (res && res.success) {
+              D = res.data || {};
+              D.photoPresence = res.photoPresence || {};
+              D.vliMileages = res.vliMileages || {};
+              D.inventory = D.inventory || [];
+              D.dashboard = D.dashboard || {};
+              D.categoriesOrder = D.categoriesOrder || [];
+              D.forms = D.forms || {};
+              D.history = D.history || [];
+              D.options = D.options || {};
+              D.frequencies = D.frequencies || {};
+              D.mailConfig = D.mailConfig || {};
+              D.stats = D.stats || {};
+              try { render(); } catch(renderErr) { console.error("render error:", renderErr); }
 
-            if(QR_BAG_PARAM) {
-              const item = D.inventory.find(i => i.name === QR_BAG_PARAM);
-              if(item) {
-                if(item.state === 'HS') alert("Ce bag est marqué Hors Service (HS)");
-                else setTimeout(() => openCheck(item), 300);
-              } else alert("Bag introuvable: " + QR_BAG_PARAM);
-            }
+              if(QR_BAG_PARAM) {
+                const item = D.inventory.find(i => i.name === QR_BAG_PARAM);
+                if(item) {
+                  if(item.state === 'HS') alert("Ce bag est marqué Hors Service (HS)");
+                  else setTimeout(() => openCheck(item), 300);
+                } else alert("Bag introuvable: " + QR_BAG_PARAM);
+              }
 
-            clearTimeout(loaderTimeout);
-            document.getElementById('global-loader').style.display = 'none';
-          } else { fail({message: res ? (res.error || "Réponse invalide") : "Pas de réponse du serveur"}); }
+              clearTimeout(loaderTimeout);
+              document.getElementById('global-loader').style.display = 'none';
+            } else { fail({message: res ? (res.error || "Réponse invalide") : "Pas de réponse du serveur"}); }
+          } catch(loadErr) {
+            console.error("loadData handler error:", loadErr);
+            fail({message: "Erreur JS client: " + loadErr.message});
+          }
         }).withFailureHandler(fail).getBootstrapData();
       }
 
@@ -720,7 +734,8 @@
 
       function toggleSealed(sectionIdx) {
         const section = document.querySelector(`.check-zone-content[data-section="${sectionIdx}"]`);
-        const checkbox = event.target;
+        const checkbox = section ? section.closest('.check-zone').querySelector('.sealed-checkbox input[type="checkbox"]') : null;
+        if (!section || !checkbox) return;
         if (checkbox.checked) {
           // Auto-fill all fields with defaults
           fillDefaultsInContainer(section);
@@ -971,7 +986,7 @@
           return (a.name||'').localeCompare(b.name||'', 'fr');
         });
         invList.forEach(i => {
-          let s = i.state === 'HS' ? `<button class="admin-btn success" onclick="setBagStatus('${i.name.replace(/'/g, "\\'")}',' Actif')">Activer</button> <button class="admin-btn danger" onclick="if(confirm('Supprimer ${i.name} ?')) delBag('${i.name.replace(/'/g, "\\'")}')">🗑️</button>` : `<button class="admin-btn secondary" onclick="setBagStatus('${i.name.replace(/'/g, "\\'")}',' HS')">HS</button> <button class="admin-btn danger" onclick="if(confirm('Supprimer ${i.name} ?')) delBag('${i.name.replace(/'/g, "\\'")}')">🗑️</button>`;
+          let s = i.state === 'HS' ? `<button class="admin-btn success" onclick="setBagStatus('${i.name.replace(/'/g, "\\'")}','Actif')">Activer</button> <button class="admin-btn danger" onclick="if(confirm('Supprimer ${i.name} ?')) delBag('${i.name.replace(/'/g, "\\'")}')">🗑️</button>` : `<button class="admin-btn secondary" onclick="setBagStatus('${i.name.replace(/'/g, "\\'")}','HS')">HS</button> <button class="admin-btn danger" onclick="if(confirm('Supprimer ${i.name} ?')) delBag('${i.name.replace(/'/g, "\\'")}')">🗑️</button>`;
           // Sous-type dropdown (only for VLI category)
           let subTypeCell = '';
           if (i.category === 'VLI') {
