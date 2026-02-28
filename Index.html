@@ -177,6 +177,13 @@
       <button class="splashBtn" onclick="chooseDesktop()">💻 Ordinateur</button>
     </div>
     <div id="modeStrip"></div>
+    <script>
+      function chooseMobile(){localStorage.setItem('checklistMode','mobile');document.body.classList.add('mobile-mode');document.getElementById('splashChoice').style.display='none';_showStrip('mobile');}
+      function chooseDesktop(){localStorage.setItem('checklistMode','desktop');document.body.classList.remove('mobile-mode');document.getElementById('splashChoice').style.display='none';_showStrip('desktop');}
+      function switchMode(m){if(m==='mobile')chooseMobile();else chooseDesktop();}
+      function _showStrip(m){var s=document.getElementById('modeStrip');s.style.display='block';s.innerHTML=m==='mobile'?'📱 Mobile <a onclick="switchMode(\'desktop\')">Passer en PC</a>':'💻 PC <a onclick="switchMode(\'mobile\')">Passer en mobile</a>';}
+      (function(){var s=localStorage.getItem('checklistMode');if(s==='mobile'||s==='desktop'){document.getElementById('splashChoice').style.display='none';_showStrip(s);if(s==='mobile')document.body.classList.add('mobile-mode');}})();
+    </script>
 
     <input type="file" id="camInput" accept="image/*" capture="environment" style="display:none;" onchange="handlePhotoUpload(this)">
     <input type="file" id="impactInput" accept="image/*" capture="environment" style="display:none;" onchange="handleImpactUpload(this)">
@@ -1600,15 +1607,8 @@
         setTimeout(() => w.print(), 500);
       }
 
-      // === MOBILE MODE ===
-      function chooseMobile() { localStorage.setItem('checklistMode','mobile'); document.body.classList.add('mobile-mode'); document.getElementById('splashChoice').style.display='none'; showModeStrip('mobile'); }
-      function chooseDesktop() { localStorage.setItem('checklistMode','desktop'); document.body.classList.remove('mobile-mode'); document.getElementById('splashChoice').style.display='none'; showModeStrip('desktop'); }
-      function switchMode(m) { if(m==='mobile') chooseMobile(); else chooseDesktop(); }
-      function showModeStrip(m) { 
-        var s = document.getElementById('modeStrip'); s.style.display='block'; 
-        s.innerHTML = m==='mobile' ? '📱 Mobile <a onclick="switchMode(\'desktop\')">Passer en PC</a>' : '💻 PC <a onclick="switchMode(\'mobile\')">Passer en mobile</a>'; 
-      }
-      (function(){ var s=localStorage.getItem('checklistMode'); if(s==='mobile'||s==='desktop'){document.getElementById('splashChoice').style.display='none';showModeStrip(s);if(s==='mobile')document.body.classList.add('mobile-mode');} })();
+      // === MOBILE MODE === (defined in inline script above splash)
+      // chooseMobile, chooseDesktop, switchMode, _showStrip are already defined
 
       // === VLI IMPACT ===
       let CURR_VLI_NAME = '';
