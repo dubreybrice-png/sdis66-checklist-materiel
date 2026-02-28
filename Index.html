@@ -1516,7 +1516,6 @@
          google.script.run.withSuccessHandler(() => {
            if(btn) { btn.style.background = '#4caf50'; btn.textContent = '✅ Sauvegardé !'; btn.disabled = false; }
            setTimeout(() => { if(btn) { btn.style.background = ''; btn.textContent = '💾 Sauvegarder Checklist'; } }, 2000);
-           loadData();
          }).withFailureHandler(e => {
            if(btn) { btn.style.background = '#c62828'; btn.textContent = '❌ Erreur !'; btn.disabled = false; }
            alert('Erreur: ' + e.message);
