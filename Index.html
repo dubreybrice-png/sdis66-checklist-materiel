@@ -628,6 +628,8 @@
         const sel = document.getElementById('new-bag-cat'); const sel2 = document.getElementById('cat-selector');
         sel.innerHTML = ""; sel2.innerHTML = "";
         D.categoriesOrder.forEach(c => { sel.innerHTML += `<option>${c}</option>`; sel2.innerHTML += `<option>${c}</option>`; });
+        // Ajouter les sous-types (VSSO etc.) dans l'éditeur uniquement
+        if(D.forms) { Object.keys(D.forms).forEach(k => { if(!D.categoriesOrder.includes(k)) sel2.innerHTML += `<option>${k}</option>`; }); }
         renderAdmin(); renderStats(); renderEditor();
       }
 
