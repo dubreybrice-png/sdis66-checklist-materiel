@@ -177,13 +177,6 @@
       <button class="splashBtn" onclick="chooseDesktop()">💻 Ordinateur</button>
     </div>
     <div id="modeStrip"></div>
-    <script>
-      function chooseMobile(){localStorage.setItem('checklistMode','mobile');document.body.classList.add('mobile-mode');document.getElementById('splashChoice').style.display='none';_showStrip('mobile');}
-      function chooseDesktop(){localStorage.setItem('checklistMode','desktop');document.body.classList.remove('mobile-mode');document.getElementById('splashChoice').style.display='none';_showStrip('desktop');}
-      function switchMode(m){if(m==='mobile')chooseMobile();else chooseDesktop();}
-      function _showStrip(m){var s=document.getElementById('modeStrip');s.style.display='block';s.innerHTML=m==='mobile'?'📱 Mobile <a onclick="switchMode(\'desktop\')">Passer en PC</a>':'💻 PC <a onclick="switchMode(\'mobile\')">Passer en mobile</a>';}
-      (function(){var s=localStorage.getItem('checklistMode');if(s==='mobile'||s==='desktop'){document.getElementById('splashChoice').style.display='none';_showStrip(s);if(s==='mobile')document.body.classList.add('mobile-mode');}})();
-    </script>
 
     <input type="file" id="camInput" accept="image/*" capture="environment" style="display:none;" onchange="handlePhotoUpload(this)">
     <input type="file" id="impactInput" accept="image/*" capture="environment" style="display:none;" onchange="handleImpactUpload(this)">
@@ -292,7 +285,7 @@
            <div id="editor-container"></div>
            <div style="display:flex; gap:10px; margin-top:20px;">
              <button class="admin-btn secondary" style="flex:1;" onclick="addSection()">+ Section</button>
-             <button id="editor-save-btn" class="admin-btn success" style="flex:1;" onclick="saveEditor()">💾 Sauvegarder Checklist</button>
+             <button class="admin-btn success" style="flex:1;" onclick="saveEditor()">💾 Sauvegarder Checklist</button>
            </div>
          </div>
       </div>
@@ -524,36 +517,30 @@
       };
 
       function fail(e) { 
-        document.getElementById('global-loader').style.display = 'flex';
         document.getElementById('error-box').style.display = 'block'; 
-        document.getElementById('tech-error').innerText = (e && e.message) ? e.message : JSON.stringify(e);
+        document.getElementById('tech-error').innerText = e.message;
       }
 
       function loadData() {
         google.script.run.withSuccessHandler(res => {
-          try {
-            console.log("getBootstrapData response:", res);
-            if (res && res.success) {
-              D = res.data;
-              D.photoPresence = res.photoPresence || {};
-              D.vliMileages = res.vliMileages || {};
-              render();
+          console.log("getBootstrapData response:", res);
+          if (res && res.success) {
+            D = res.data;
+            D.photoPresence = res.photoPresence || {};
+            D.vliMileages = res.vliMileages || {};
+            render();
 
-              if(QR_BAG_PARAM) {
-                const item = D.inventory.find(i => i.name === QR_BAG_PARAM);
-                if(item) {
-                  if(item.state === 'HS') alert("Ce bag est marqué Hors Service (HS)");
-                  else setTimeout(() => openCheck(item), 300);
-                } else alert("Bag introuvable: " + QR_BAG_PARAM);
-              }
+            if(QR_BAG_PARAM) {
+              const item = D.inventory.find(i => i.name === QR_BAG_PARAM);
+              if(item) {
+                if(item.state === 'HS') alert("Ce bag est marqué Hors Service (HS)");
+                else setTimeout(() => openCheck(item), 300);
+              } else alert("Bag introuvable: " + QR_BAG_PARAM);
+            }
 
-              clearTimeout(loaderTimeout);
-              document.getElementById('global-loader').style.display = 'none';
-            } else { fail({message: res ? (res.error || "Réponse invalide") : "Pas de réponse du serveur"}); }
-          } catch(renderErr) {
-            console.error("loadData error:", renderErr);
-            fail({message: "Erreur rendu: " + renderErr.message});
-          }
+            clearTimeout(loaderTimeout);
+            document.getElementById('global-loader').style.display = 'none';
+          } else { fail({message: res ? res.error : "Pas de réponse du serveur"}); }
         }).withFailureHandler(fail).getBootstrapData();
       }
 
@@ -1347,7 +1334,7 @@
              if(sec.items && sec.items.length > 0) {
                  const nbItems = sec.items.length;
                  sec.items.forEach((i, itemIdx) => {
-                    h += `<div class="item-row" data-item-idx="${itemIdx}"><span style="cursor:move; color:#999;">⋮⋮</span><input class="i-name" value="${i.name}" placeholder="Nom item" style="flex:1;" oninput="markEditorDirty()"><select class="i-type" onchange="markEditorDirty()"><option value="texte" ${i.type=='texte'?'selected':''}>Texte</option><option value="case" ${i.type=='case'?'selected':''}>Case</option><option value="nombre" ${i.type=='nombre'?'selected':''}>Nombre</option><option value="date" ${i.type=='date'?'selected':''}>Date</option></select><input class="i-def" value="${i.def||''}" placeholder="Défaut" style="width:80px;" oninput="markEditorDirty()"><button class="admin-btn danger" style="padding:5px 8px;" onclick="deleteItemConfirm(this)">✕</button></div>`;
+                    h += `<div class="item-row" data-item-idx="${itemIdx}"><span style="cursor:move; color:#999;">⋮⋮</span><input class="i-name" value="${i.name}" placeholder="Nom item" style="flex:1;"><select class="i-type"><option value="texte" ${i.type=='texte'?'selected':''}>Texte</option><option value="case" ${i.type=='case'?'selected':''}>Case</option><option value="nombre" ${i.type=='nombre'?'selected':''}>Nombre</option><option value="date" ${i.type=='date'?'selected':''}>Date</option></select><input class="i-def" value="${i.def||''}" placeholder="Défaut" style="width:80px;"><button class="admin-btn danger" style="padding:5px 8px;" onclick="deleteItemConfirm(this)">✕</button><button class="admin-btn secondary" style="padding:5px 8px;" onclick="quickSaveEditor()">💾</button></div>`;
                  });
              }
              h += `</div><div style="padding:10px; background:var(--section-bg);"><button class="admin-btn secondary" onclick="addItem(this)">+ Item</button></div></div>`;
@@ -1358,7 +1345,7 @@
          new Sortable(c, {
            animation: 150,
            handle: '.section-header span',
-           onEnd: function() { markEditorDirty(); }
+           onEnd: function() { quickSaveEditor(); }
          });
          
          // Initialiser Sortable pour chaque liste d'items
@@ -1366,7 +1353,7 @@
            new Sortable(list, {
              animation: 150,
              handle: '.item-row span',
-             onEnd: function() { markEditorDirty(); }
+             onEnd: function() { quickSaveEditor(); }
            });
          });
       }
@@ -1378,7 +1365,7 @@
         D.forms[cat][idx] = D.forms[cat][idx-1];
         D.forms[cat][idx-1] = temp;
         renderEditor();
-        markEditorDirty();
+        quickSaveEditor();
       }
       
       function moveSectionDown(idx) {
@@ -1388,7 +1375,7 @@
         D.forms[cat][idx] = D.forms[cat][idx+1];
         D.forms[cat][idx+1] = temp;
         renderEditor();
-        markEditorDirty();
+        quickSaveEditor();
       }
       
       function moveItemUp(secIdx, itemIdx) {
@@ -1399,7 +1386,7 @@
         items[itemIdx] = items[itemIdx-1];
         items[itemIdx-1] = temp;
         renderEditor();
-        markEditorDirty();
+        quickSaveEditor();
       }
       
       function moveItemDown(secIdx, itemIdx) {
@@ -1410,28 +1397,25 @@
         items[itemIdx] = items[itemIdx+1];
         items[itemIdx+1] = temp;
         renderEditor();
-        markEditorDirty();
+        quickSaveEditor();
       }
       
       function deleteSectionConfirm(idx) {
         if(confirm("Supprimer cette section et tous ses items ?")) {
           const blocks = document.querySelectorAll('.section-block');
           blocks[idx].remove();
-          markEditorDirty();
+          quickSaveEditor();
         }
       }
       
       function deleteItemConfirm(btn) {
         if(confirm("Supprimer cet item ?")) {
           btn.closest('.item-row').remove();
-          markEditorDirty();
+          quickSaveEditor();
         }
       }
       
-      function markEditorDirty() {
-        const btn = document.getElementById('editor-save-btn');
-        if(btn) { btn.style.background = '#ff9800'; btn.textContent = '💾 Sauvegarder (non enregistré)'; }
-      }
+      function quickSaveEditor() { saveEditor(); }
 
       function saveEditor() {
          const cat = document.getElementById('cat-selector').value; let data = [];
@@ -1441,18 +1425,10 @@
                data.push({ section: s, position: p, item: row.querySelector('input').value, type: row.querySelector('select').value, def: row.querySelectorAll('input')[1].value });
             });
          });
-         const btn = document.getElementById('editor-save-btn');
-         if(btn) { btn.style.background = '#666'; btn.textContent = '⏳ Enregistrement...'; btn.disabled = true; }
-         google.script.run.withSuccessHandler(() => {
-           if(btn) { btn.style.background = '#4caf50'; btn.textContent = '✅ Sauvegardé !'; btn.disabled = false; }
-           setTimeout(() => { if(btn) { btn.style.background = ''; btn.textContent = '💾 Sauvegarder Checklist'; } }, 2000);
-         }).withFailureHandler(e => {
-           if(btn) { btn.style.background = '#c62828'; btn.textContent = '❌ Erreur !'; btn.disabled = false; }
-           alert('Erreur: ' + e.message);
-         }).updateCategoryContent(cat, data);
+         google.script.run.withSuccessHandler(loadData).updateCategoryContent(cat, data);
       }
       
-      function addItem(b) { b.parentElement.previousElementSibling.innerHTML += `<div class="item-row"><span style="cursor:move; color:#999;">⋮⋮</span><input placeholder="Item" style="flex:1;" oninput="markEditorDirty()"><select onchange="markEditorDirty()"><option value="texte">Texte</option><option value="case">Case</option><option value="nombre">Nombre</option><option value="date">Date</option></select><input placeholder="Défaut" style="width:80px;" oninput="markEditorDirty()"><button class="admin-btn danger" style="padding:5px 8px;" onclick="deleteItemConfirm(this)">✕</button></div>`; markEditorDirty(); }
+      function addItem(b) { b.parentElement.previousElementSibling.innerHTML += `<div class="item-row"><span style="cursor:move; color:#999;">⋮⋮</span><input placeholder="Item" style="flex:1;"><select><option value="texte">Texte</option><option value="case">Case</option><option value="nombre">Nombre</option><option value="date">Date</option></select><input placeholder="Défaut" style="width:80px;"><button class="admin-btn danger" style="padding:5px 8px;" onclick="this.parentElement.remove()">✕</button><button class="admin-btn secondary" style="padding:5px 8px;" onclick="quickSaveEditor()">💾</button></div>`; }
       function addSection() { document.getElementById('editor-container').innerHTML += `<div class="section-block"><div class="section-header"><span style="cursor:move; padding:5px; color:var(--text-color);">☰</span><input value="Nouvelle Section" style="flex:1;"><input placeholder="Pos" style="width:120px;"></div><div class="items-list"></div><div style="padding:10px; background:var(--section-bg);"><button class="admin-btn secondary" onclick="addItem(this)">+ Item</button></div></div>`; }
       function showQR(n) { const u = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(APP_URL + "?bag=" + n)}`; document.getElementById('qrTitle').innerText = n; document.getElementById('qr-img').src = u; document.getElementById('qrModal').style.display = 'flex'; }
       function downloadQR() { window.open(document.getElementById('qr-img').src); }
@@ -1607,8 +1583,15 @@
         setTimeout(() => w.print(), 500);
       }
 
-      // === MOBILE MODE === (defined in inline script above splash)
-      // chooseMobile, chooseDesktop, switchMode, _showStrip are already defined
+      // === MOBILE MODE ===
+      function chooseMobile() { localStorage.setItem('checklistMode','mobile'); document.body.classList.add('mobile-mode'); document.getElementById('splashChoice').style.display='none'; showModeStrip('mobile'); }
+      function chooseDesktop() { localStorage.setItem('checklistMode','desktop'); document.body.classList.remove('mobile-mode'); document.getElementById('splashChoice').style.display='none'; showModeStrip('desktop'); }
+      function switchMode(m) { if(m==='mobile') chooseMobile(); else chooseDesktop(); }
+      function showModeStrip(m) { 
+        var s = document.getElementById('modeStrip'); s.style.display='block'; 
+        s.innerHTML = m==='mobile' ? '📱 Mobile <a onclick="switchMode(\'desktop\')">Passer en PC</a>' : '💻 PC <a onclick="switchMode(\'mobile\')">Passer en mobile</a>'; 
+      }
+      (function(){ var s=localStorage.getItem('checklistMode'); if(s==='mobile'||s==='desktop'){document.getElementById('splashChoice').style.display='none';showModeStrip(s);if(s==='mobile')document.body.classList.add('mobile-mode');} })();
 
       // === VLI IMPACT ===
       let CURR_VLI_NAME = '';
