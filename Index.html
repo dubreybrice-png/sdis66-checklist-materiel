@@ -644,14 +644,12 @@
         document.getElementById('extra-fields').style.display = D.options.enableExpiry ? 'block' : 'none';
         document.getElementById('verif-field').style.display = D.options.enableVerifier ? 'block' : 'none';
         const b = document.getElementById('m-body'); b.innerHTML = "";
-        // Build list of form sections: category sections + VSSO sections if applicable
+        // Build list of form sections: VSSO only if subType VSSO, otherwise category
         let formSections = [];
-        if(D.forms && D.forms[item.category]) {
-          formSections = formSections.concat(D.forms[item.category]);
-        }
-        // If VLI with subType VSSO, append VSSO checklist
         if(item.category === 'VLI' && (item.subType || '').trim() === 'VSSO' && D.forms && D.forms['VSSO']) {
           formSections = formSections.concat(D.forms['VSSO']);
+        } else if(D.forms && D.forms[item.category]) {
+          formSections = formSections.concat(D.forms[item.category]);
         }
         if(formSections.length > 0) {
            formSections.forEach((sec, secIdx) => {
