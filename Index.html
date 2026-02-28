@@ -247,7 +247,7 @@
              </div>
            </div>
           <table class="inv-table">
-            <thead><tr><th>↕</th><th>N°</th><th>Catégorie</th><th>Nom</th><th>Mails Orange</th><th>Mails Rouge</th><th>Action</th></tr></thead>
+            <thead><tr><th>↕</th><th>N°</th><th>Catégorie</th><th>Nom</th><th>Sous-type</th><th>Mails Orange</th><th>Mails Rouge</th><th>Action</th></tr></thead>
              <tbody id="inv-body"></tbody>
            </table>
          </div>
@@ -283,9 +283,10 @@
          <div class="admin-card">
            <select id="cat-selector" onchange="renderEditor()" style="width:100%; padding:10px; margin-bottom:15px;"></select>
            <div id="editor-container"></div>
-           <div style="display:flex; gap:10px; margin-top:20px;">
+           <div style="display:flex; gap:10px; margin-top:20px; align-items:center;">
              <button class="admin-btn secondary" style="flex:1;" onclick="addSection()">+ Section</button>
-             <button class="admin-btn success" style="flex:1;" onclick="saveEditor()">💾 Sauvegarder Checklist</button>
+             <button id="editor-save-btn" class="admin-btn success" style="flex:1;" onclick="saveEditor()">💾 Sauvegarder Checklist</button>
+             <span id="editor-dirty-indicator" style="display:none; color:#ff9800; font-weight:bold;">⚠️ Non sauvegardé</span>
            </div>
          </div>
       </div>
@@ -622,7 +623,19 @@
         const sel = document.getElementById('new-bag-cat'); const sel2 = document.getElementById('cat-selector');
         sel.innerHTML = ""; sel2.innerHTML = "";
         D.categoriesOrder.forEach(c => { sel.innerHTML += `<option>${c}</option>`; sel2.innerHTML += `<option>${c}</option>`; });
+        if (!D.categoriesOrder.includes('VSSO')) { sel2.innerHTML += `<option>VSSO</option>`; }
         renderAdmin(); renderStats(); renderEditor();
+      }
+
+      function updateSubType(el) {
+        var bag = el.getAttribute('data-bag');
+        var val = el.value;
+        var item = D.inventory.find(function(i) { return i.name === bag; });
+        if (item) item.subType = val;
+        google.script.run.withSuccessHandler(function() {
+        }).withFailureHandler(function(err) {
+          alert('Erreur sous-type: ' + err.message);
+        }).updateBagSubType(bag, val);
       }
 
       function openCheck(item) {
@@ -636,8 +649,9 @@
         document.getElementById('extra-fields').style.display = D.options.enableExpiry ? 'block' : 'none';
         document.getElementById('verif-field').style.display = D.options.enableVerifier ? 'block' : 'none';
         const b = document.getElementById('m-body'); b.innerHTML = "";
-        if(D.forms && D.forms[item.category]) {
-           D.forms[item.category].forEach((sec, secIdx) => {
+        const formKey = (item.category === 'VLI' && item.subType === 'VSSO') ? 'VSSO' : item.category;
+        if(D.forms && D.forms[formKey]) {
+           D.forms[formKey].forEach((sec, secIdx) => {
               let p = sec.position ? `<span class="zone-pos">${sec.position}</span>` : "";
               const photoKey = makePhotoKey(item.category, item.name, sec.section);
               const hasPhoto = checkPhotoPresence(photoKey);
@@ -899,7 +913,13 @@
         });
         invList.forEach(i => {
           let s = i.state === 'HS' ? `<button class="admin-btn success" onclick="setBagStatus('${i.name.replace(/'/g, "\\'")}',' Actif')">Activer</button> <button class="admin-btn danger" onclick="if(confirm('Supprimer ${i.name} ?')) delBag('${i.name.replace(/'/g, "\\'")}')">🗑️</button>` : `<button class="admin-btn secondary" onclick="setBagStatus('${i.name.replace(/'/g, "\\'")}',' HS')">HS</button> <button class="admin-btn danger" onclick="if(confirm('Supprimer ${i.name} ?')) delBag('${i.name.replace(/'/g, "\\'")}')">🗑️</button>`;
-          ib.innerHTML += `<tr data-bag="${i.name}" data-cat="${i.category}"><td class="inv-drag">↕</td><td class="order-cell">${i.order || ''}</td><td>${i.category}</td><td><b>${i.name}</b> <button class="admin-btn" style="padding:2px 6px; font-size:0.8rem; margin-left:5px;" onclick="renameBag('${i.name.replace(/'/g, "\\'")}')">✏️</button></td><td><input value="${i.mailOrange||''}" placeholder="mail1@test.com; mail2@test.com" data-bag="${i.name}" data-type="orange" onchange="updateMail(this)" style="width:100%; padding:8px; border:1px solid var(--border-color); border-radius:4px; background:var(--input-bg); color:var(--input-text);"></td><td><input value="${i.mailRed||''}" placeholder="mail1@test.com; mail2@test.com" data-bag="${i.name}" data-type="red" onchange="updateMail(this)" style="width:100%; padding:8px; border:1px solid var(--border-color); border-radius:4px; background:var(--input-bg); color:var(--input-text);"></td><td>${s}</td></tr>`;
+          let subTypeCell = '';
+          if (i.category === 'VLI') {
+            subTypeCell = `<td><select data-bag="${i.name}" onchange="updateSubType(this)" style="padding:6px; border:1px solid var(--border-color); border-radius:4px; background:var(--input-bg); color:var(--input-text);"><option value="">Standard</option><option value="VSSO" ${i.subType==='VSSO'?'selected':''}>VSSO</option></select></td>`;
+          } else {
+            subTypeCell = `<td style="color:#999; text-align:center;">—</td>`;
+          }
+          ib.innerHTML += `<tr data-bag="${i.name}" data-cat="${i.category}"><td class="inv-drag">↕</td><td class="order-cell">${i.order || ''}</td><td>${i.category}</td><td><b>${i.name}</b> <button class="admin-btn" style="padding:2px 6px; font-size:0.8rem; margin-left:5px;" onclick="renameBag('${i.name.replace(/'/g, "\\'")}')">✏️</button></td>${subTypeCell}<td><input value="${i.mailOrange||''}" placeholder="mail1@test.com; mail2@test.com" data-bag="${i.name}" data-type="orange" onchange="updateMail(this)" style="width:100%; padding:8px; border:1px solid var(--border-color); border-radius:4px; background:var(--input-bg); color:var(--input-text);"></td><td><input value="${i.mailRed||''}" placeholder="mail1@test.com; mail2@test.com" data-bag="${i.name}" data-type="red" onchange="updateMail(this)" style="width:100%; padding:8px; border:1px solid var(--border-color); border-radius:4px; background:var(--input-bg); color:var(--input-text);"></td><td>${s}</td></tr>`;
         });
         const vliBody = document.getElementById('vli-loc-body');
         if (vliBody) {
@@ -1334,7 +1354,7 @@
              if(sec.items && sec.items.length > 0) {
                  const nbItems = sec.items.length;
                  sec.items.forEach((i, itemIdx) => {
-                    h += `<div class="item-row" data-item-idx="${itemIdx}"><span style="cursor:move; color:#999;">⋮⋮</span><input class="i-name" value="${i.name}" placeholder="Nom item" style="flex:1;"><select class="i-type"><option value="texte" ${i.type=='texte'?'selected':''}>Texte</option><option value="case" ${i.type=='case'?'selected':''}>Case</option><option value="nombre" ${i.type=='nombre'?'selected':''}>Nombre</option><option value="date" ${i.type=='date'?'selected':''}>Date</option></select><input class="i-def" value="${i.def||''}" placeholder="Défaut" style="width:80px;"><button class="admin-btn danger" style="padding:5px 8px;" onclick="deleteItemConfirm(this)">✕</button><button class="admin-btn secondary" style="padding:5px 8px;" onclick="quickSaveEditor()">💾</button></div>`;
+                    h += `<div class="item-row" data-item-idx="${itemIdx}"><span style="cursor:move; color:#999;">⋮⋮</span><input class="i-name" value="${i.name}" placeholder="Nom item" style="flex:1;"><select class="i-type"><option value="texte" ${i.type=='texte'?'selected':''}>Texte</option><option value="case" ${i.type=='case'?'selected':''}>Case</option><option value="nombre" ${i.type=='nombre'?'selected':''}>Nombre</option><option value="date" ${i.type=='date'?'selected':''}>Date</option></select><input class="i-def" value="${i.def||''}" placeholder="Défaut" style="width:80px;"><input class="i-sub" value="${i.subsection||''}" placeholder="Sous-section" style="width:100px;"><button class="admin-btn danger" style="padding:5px 8px;" onclick="deleteItemConfirm(this)">✕</button></div>`;
                  });
              }
              h += `</div><div style="padding:10px; background:var(--section-bg);"><button class="admin-btn secondary" onclick="addItem(this)">+ Item</button></div></div>`;
@@ -1415,21 +1435,28 @@
         }
       }
       
-      function quickSaveEditor() { saveEditor(); }
+      var editorDirty = false;
+      function markEditorDirty() { editorDirty = true; var ind = document.getElementById('editor-dirty-indicator'); if(ind) ind.style.display = 'inline'; var btn = document.getElementById('editor-save-btn'); if(btn) btn.textContent = '💾 Sauvegarder* (modifié)'; }
+      function quickSaveEditor() { markEditorDirty(); }
 
       function saveEditor() {
-         const cat = document.getElementById('cat-selector').value; let data = [];
-         document.querySelectorAll('.section-block').forEach(blk => {
-            let s = blk.querySelector('.sec-name').value; let p = blk.querySelector('.sec-pos').value;
-            blk.querySelectorAll('.item-row').forEach(row => {
-               data.push({ section: s, position: p, item: row.querySelector('input').value, type: row.querySelector('select').value, def: row.querySelectorAll('input')[1].value });
+         var cat = document.getElementById('cat-selector').value; var data = [];
+         document.querySelectorAll('.section-block').forEach(function(blk) {
+            var s = blk.querySelector('.sec-name').value; var p = blk.querySelector('.sec-pos').value;
+            blk.querySelectorAll('.item-row').forEach(function(row) {
+               var iName = row.querySelector('.i-name'); var iType = row.querySelector('.i-type'); var iDef = row.querySelector('.i-def'); var iSub = row.querySelector('.i-sub');
+               data.push({ section: s, position: p, item: iName ? iName.value : '', type: iType ? iType.value : 'texte', def: iDef ? iDef.value : '', subsection: iSub ? iSub.value : '' });
             });
          });
-         google.script.run.withSuccessHandler(loadData).updateCategoryContent(cat, data);
+         google.script.run.withSuccessHandler(function() {
+            editorDirty = false; var ind = document.getElementById('editor-dirty-indicator'); if(ind) ind.style.display = 'none'; var btn = document.getElementById('editor-save-btn'); if(btn) btn.textContent = '💾 Sauvegarder Checklist';
+            var groups = {}; data.forEach(function(row) { if(!groups[row.section]) groups[row.section] = { section: row.section, position: row.position, items: [] }; if(row.position) groups[row.section].position = row.position; if(row.item) groups[row.section].items.push({ name: row.item, type: row.type, def: row.def, subsection: row.subsection || '' }); }); D.forms[cat] = Object.values(groups);
+            alert('✅ Checklist sauvegardée !');
+         }).withFailureHandler(function(err) { alert('❌ Erreur: ' + err.message); }).updateCategoryContent(cat, data);
       }
       
-      function addItem(b) { b.parentElement.previousElementSibling.innerHTML += `<div class="item-row"><span style="cursor:move; color:#999;">⋮⋮</span><input placeholder="Item" style="flex:1;"><select><option value="texte">Texte</option><option value="case">Case</option><option value="nombre">Nombre</option><option value="date">Date</option></select><input placeholder="Défaut" style="width:80px;"><button class="admin-btn danger" style="padding:5px 8px;" onclick="this.parentElement.remove()">✕</button><button class="admin-btn secondary" style="padding:5px 8px;" onclick="quickSaveEditor()">💾</button></div>`; }
-      function addSection() { document.getElementById('editor-container').innerHTML += `<div class="section-block"><div class="section-header"><span style="cursor:move; padding:5px; color:var(--text-color);">☰</span><input value="Nouvelle Section" style="flex:1;"><input placeholder="Pos" style="width:120px;"></div><div class="items-list"></div><div style="padding:10px; background:var(--section-bg);"><button class="admin-btn secondary" onclick="addItem(this)">+ Item</button></div></div>`; }
+      function addItem(b) { b.parentElement.previousElementSibling.innerHTML += `<div class="item-row"><span style="cursor:move; color:#999;">⋮⋮</span><input class="i-name" placeholder="Item" style="flex:1;"><select class="i-type"><option value="texte">Texte</option><option value="case">Case</option><option value="nombre">Nombre</option><option value="date">Date</option></select><input class="i-def" placeholder="Défaut" style="width:80px;"><input class="i-sub" placeholder="Sous-section" style="width:100px;"><button class="admin-btn danger" style="padding:5px 8px;" onclick="this.parentElement.remove(); markEditorDirty();">✕</button></div>`; markEditorDirty(); }
+      function addSection() { document.getElementById('editor-container').innerHTML += `<div class="section-block"><div class="section-header"><span style="cursor:move; padding:5px; color:var(--text-color);">☰</span><input class="sec-name" value="Nouvelle Section" style="flex:1;"><input class="sec-pos" placeholder="Pos" style="width:120px;"></div><div class="items-list"></div><div style="padding:10px; background:var(--section-bg);"><button class="admin-btn secondary" onclick="addItem(this)">+ Item</button></div></div>`; markEditorDirty(); }
       function showQR(n) { const u = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(APP_URL + "?bag=" + n)}`; document.getElementById('qrTitle').innerText = n; document.getElementById('qr-img').src = u; document.getElementById('qrModal').style.display = 'flex'; }
       function downloadQR() { window.open(document.getElementById('qr-img').src); }
       function printQR() { let w = window.open(''); w.document.write(`<img src="${document.getElementById('qr-img').src}" onload="window.print()">`); }
