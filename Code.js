@@ -30,27 +30,43 @@ function getAppUrl() {
 // --- BOOTSTRAP (data + photos + mileages) with short cache ---
 function getBootstrapData() {
   try {
+    // Essayer le cache rapide (5s)
     const cache = CacheService.getScriptCache();
-    const cached = cache.get("BOOTSTRAP_V1");
-    if (cached) {
-      try { return JSON.parse(cached); } catch(e) { /* cache corrompu, on continue */ }
-    }
+    try {
+      const cached = cache.get("BOOTSTRAP_V1");
+      if (cached) {
+        var parsed = JSON.parse(cached);
+        if (parsed && parsed.success) return parsed;
+      }
+    } catch(e) { /* cache miss or corrupt */ }
 
-    const snap = SCRIPT_PROP.getProperty(BOOTSTRAP_SNAPSHOT_KEY);
-    if (snap) {
-      try {
-        const parsed = JSON.parse(snap);
-        if (parsed && parsed.success) {
-          try { cache.put("BOOTSTRAP_V1", snap, 5); } catch(e) { /* trop gros pour cache */ }
-          return parsed;
+    // Essayer le snapshot persistant
+    try {
+      const snap = SCRIPT_PROP.getProperty(BOOTSTRAP_SNAPSHOT_KEY);
+      if (snap) {
+        var parsed2 = JSON.parse(snap);
+        if (parsed2 && parsed2.success) {
+          try { cache.put("BOOTSTRAP_V1", snap, 5); } catch(e) {}
+          return parsed2;
         }
-      } catch(e) { /* snapshot corrompu, on rebuild */ }
-    }
+      }
+    } catch(e) { /* snapshot corrupt */ }
 
-    const payload = rebuildBootstrapSnapshot_();
-    if (payload) {
-      try { cache.put("BOOTSTRAP_V1", JSON.stringify(payload), 5); } catch(e) { /* trop gros */ }
-    }
+    // Rebuild direct — pas de snapshot, retour direct
+    var base = getData();
+    if (!base || !base.success) return base || { success: false, error: "getData returned null" };
+    var payload = {
+      success: true,
+      data: base.data,
+      photoPresence: getPhotoPresenceMap(),
+      vliMileages: getAllVliMileages()
+    };
+    // Sauver le snapshot en background (best effort)
+    try {
+      var json = JSON.stringify(payload);
+      SCRIPT_PROP.setProperty(BOOTSTRAP_SNAPSHOT_KEY, json);
+      try { cache.put("BOOTSTRAP_V1", json, 5); } catch(e) {}
+    } catch(e) { Logger.log("Snapshot save failed: " + e); }
     return payload;
   } catch(e) {
     Logger.log("getBootstrapData FATAL: " + e.toString());
@@ -1158,7 +1174,7 @@ function saveVliMileage(bagName, km, dateStr) {
 function invalidateCache_() {
   try {
     CacheService.getScriptCache().remove("BOOTSTRAP_V1");
-    rebuildBootstrapSnapshot_();
+    SCRIPT_PROP.deleteProperty(BOOTSTRAP_SNAPSHOT_KEY);
   } catch (e) {
     Logger.log("Cache invalidate error: " + e.toString());
   }
