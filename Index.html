@@ -773,12 +773,10 @@
         const bagName = sel.dataset.bag;
         const subType = sel.value;
         google.script.run.withSuccessHandler(() => {
-          // Update local data
-          const item = DATA.find(d => d.name === bagName);
+          const item = D.inventory.find(d => d.name === bagName);
           if (item) item.subType = subType;
-          showToast(subType ? 'Sous-type ' + subType + ' activé' : 'Sous-type retiré', 'success');
         }).withFailureHandler(e => {
-          showToast('Erreur: ' + e.message, 'error');
+          alert('Erreur: ' + e.message);
         }).updateBagSubType(bagName, subType);
       }
 
