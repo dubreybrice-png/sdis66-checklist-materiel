@@ -176,6 +176,12 @@
       <button class="splashBtn" onclick="chooseMobile()">📱 Téléphone</button>
       <button class="splashBtn" onclick="chooseDesktop()">💻 Ordinateur</button>
     </div>
+    <script>
+      function chooseMobile(){localStorage.setItem('checklistMode','mobile');document.body.classList.add('mobile-mode');document.getElementById('splashChoice').style.display='none';showModeStrip('mobile');}
+      function chooseDesktop(){localStorage.setItem('checklistMode','desktop');document.body.classList.remove('mobile-mode');document.getElementById('splashChoice').style.display='none';showModeStrip('desktop');}
+      function showModeStrip(m){var s=document.getElementById('modeStrip');if(!s)return;s.innerHTML='<span>Mode: '+(m==='mobile'?'📱 Téléphone':'💻 Ordinateur')+'</span><button onclick="switchMode(\''+(m==='mobile'?'desktop':'mobile')+'\')">Changer</button>';s.style.display='flex';}
+      function switchMode(m){if(m==='mobile')chooseMobile();else chooseDesktop();}
+    </script>
     <div id="modeStrip"></div>
 
     <input type="file" id="camInput" accept="image/*" capture="environment" style="display:none;" onchange="handlePhotoUpload(this)">
@@ -1610,14 +1616,7 @@
         setTimeout(() => w.print(), 500);
       }
 
-      // === MOBILE MODE ===
-      function chooseMobile() { localStorage.setItem('checklistMode','mobile'); document.body.classList.add('mobile-mode'); document.getElementById('splashChoice').style.display='none'; showModeStrip('mobile'); }
-      function chooseDesktop() { localStorage.setItem('checklistMode','desktop'); document.body.classList.remove('mobile-mode'); document.getElementById('splashChoice').style.display='none'; showModeStrip('desktop'); }
-      function switchMode(m) { if(m==='mobile') chooseMobile(); else chooseDesktop(); }
-      function showModeStrip(m) { 
-        var s = document.getElementById('modeStrip'); s.style.display='block'; 
-        s.innerHTML = m==='mobile' ? '📱 Mobile <a onclick="switchMode(\'desktop\')">Passer en PC</a>' : '💻 PC <a onclick="switchMode(\'mobile\')">Passer en mobile</a>'; 
-      }
+      // === MOBILE MODE (fonctions définies dans le bloc script splash) ===
       (function(){ var s=localStorage.getItem('checklistMode'); if(s==='mobile'||s==='desktop'){document.getElementById('splashChoice').style.display='none';showModeStrip(s);if(s==='mobile')document.body.classList.add('mobile-mode');} })();
 
       // === VLI IMPACT ===

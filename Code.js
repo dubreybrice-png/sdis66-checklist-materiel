@@ -92,6 +92,8 @@ function setup() {
       enablePhotos: true
     }));
   }
+  // Purger le snapshot pour forcer un rebuild avec la nouvelle structure
+  invalidateCache_();
 }
 
 // --- DATA FETCHING (Chargement des données) ---
