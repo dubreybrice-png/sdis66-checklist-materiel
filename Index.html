@@ -66,6 +66,12 @@
       .sealed-checkbox { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: normal; cursor: pointer; }
       .sealed-checkbox input[type="checkbox"] { cursor: pointer; width: 16px; height: 16px; }
       
+      .subsection-block { margin-left: 15px; border-left: 3px solid #ff9800; margin-bottom: 2px; }
+      .subsection-header { background: rgba(255,152,0,0.15); padding: 8px 12px; display: flex; justify-content: space-between; align-items: center; font-weight: 600; font-size: 0.85rem; color: #ff9800; }
+      body.dark-mode .subsection-header { background: rgba(255,152,0,0.1); color: #ffb74d; }
+      body.dark-mode .subsection-block { border-left-color: #ffb74d; }
+      .subsection-block .form-row { padding-left: 12px; }
+
       .zone-pos-container { display: flex; align-items: center; gap: 8px; }
       .zone-pos { font-size: 0.9rem; background: rgba(255,255,255,0.3); padding: 4px 10px; border-radius: 15px; font-weight: 500; }
       .cam-icon-btn { cursor: pointer; font-size: 1.2rem; filter: drop-shadow(1px 1px 2px rgba(0,0,0,0.2)); transition: transform 0.2s; position: relative; display: inline-block; }
@@ -247,7 +253,7 @@
              </div>
            </div>
           <table class="inv-table">
-            <thead><tr><th>↕</th><th>N°</th><th>Catégorie</th><th>Nom</th><th>Mails Orange</th><th>Mails Rouge</th><th>Action</th></tr></thead>
+            <thead><tr><th>↕</th><th>N°</th><th>Catégorie</th><th>Nom</th><th>Sous-type</th><th>Mails Orange</th><th>Mails Rouge</th><th>Action</th></tr></thead>
              <tbody id="inv-body"></tbody>
            </table>
          </div>
@@ -636,8 +642,17 @@
         document.getElementById('extra-fields').style.display = D.options.enableExpiry ? 'block' : 'none';
         document.getElementById('verif-field').style.display = D.options.enableVerifier ? 'block' : 'none';
         const b = document.getElementById('m-body'); b.innerHTML = "";
+        // Build list of form sections: category sections + VSSO sections if applicable
+        let formSections = [];
         if(D.forms && D.forms[item.category]) {
-           D.forms[item.category].forEach((sec, secIdx) => {
+          formSections = formSections.concat(D.forms[item.category]);
+        }
+        // If VLI with subType VSSO, append VSSO checklist
+        if(item.category === 'VLI' && (item.subType || '').trim() === 'VSSO' && D.forms && D.forms['VSSO']) {
+          formSections = formSections.concat(D.forms['VSSO']);
+        }
+        if(formSections.length > 0) {
+           formSections.forEach((sec, secIdx) => {
               let p = sec.position ? `<span class="zone-pos">${sec.position}</span>` : "";
               const photoKey = makePhotoKey(item.category, item.name, sec.section);
               const hasPhoto = checkPhotoPresence(photoKey);
@@ -647,7 +662,26 @@
                 `<span class="cam-icon-btn" onclick="checkPhoto('${item.category}', '${item.name}', '${sec.section}')" data-photo-key="${photoKey}">📷<span class="photo-badge ${badgeClass}">${badgeText}</span></span>` : '';
               let sealedCheckbox = `<label class="sealed-checkbox"><input type="checkbox" onchange="toggleSealed(${secIdx})"> Scellé</label>`;
               let h = `<div class="check-zone"><div class="check-zone-header"><span>${sec.section}</span><div class="zone-pos-container">${sealedCheckbox}${photoIcon}${p}</div></div><div class="check-zone-content" data-section="${secIdx}">`;
+              
+              // Group items by subsection
+              let currentSubsec = null;
+              let subSecCounter = 0;
               sec.items.forEach(it => {
+                 const itemSubsec = it.subsection || '';
+                 
+                 // If entering a new subsection
+                 if (itemSubsec && itemSubsec !== currentSubsec) {
+                   if (currentSubsec !== null) h += '</div>'; // close previous subsection div
+                   const subId = 'sub_' + secIdx + '_' + subSecCounter;
+                   subSecCounter++;
+                   h += `<div class="subsection-block" data-subsection="${itemSubsec}">`;
+                   h += `<div class="subsection-header"><span>↳ ${itemSubsec}</span><label class="sealed-checkbox"><input type="checkbox" onchange="toggleSubSealed(this, ${secIdx})"> Scellé</label></div>`;
+                   currentSubsec = itemSubsec;
+                 } else if (!itemSubsec && currentSubsec !== null) {
+                   h += '</div>'; // close previous subsection div
+                   currentSubsec = null;
+                 }
+                 
                  let f = ""; let d = it.def || '';
                  if(it.type == 'case') f = `<div class="form-input-container"><label class="switch"><input type="checkbox" data-id="${it.name}" data-def="${d}"><span class="slider"></span></label></div>`;
                  else if (it.type == 'date') f = `<div class="form-input-container"><input type="date" data-id="${it.name}" data-def="${d}" value="${d}"></div>`;
@@ -655,6 +689,7 @@
                  else f = `<div class="form-input-container"><input type="text" data-id="${it.name}" data-def="${d}" placeholder="${d}"></div>`;
                  h += `<div class="form-row"><label>${it.name}</label>${f}</div>`;
               });
+              if (currentSubsec !== null) h += '</div>'; // close last subsection
               b.innerHTML += h + `</div></div>`;
            });
         }
@@ -686,25 +721,64 @@
         const section = document.querySelector(`.check-zone-content[data-section="${sectionIdx}"]`);
         const checkbox = event.target;
         if (checkbox.checked) {
-          // Auto-remplir tous les champs avec leurs valeurs par défaut
-          section.querySelectorAll('input[type="checkbox"][data-def]').forEach(input => {
-            const def = input.getAttribute('data-def');
-            input.checked = (def === 'true' || def === 'Oui' || def === true);
-          });
-          section.querySelectorAll('input[type="date"][data-def]').forEach(input => {
-            input.value = input.getAttribute('data-def') || '';
-          });
-          section.querySelectorAll('input[type="number"][data-def]').forEach(input => {
-            input.value = input.getAttribute('data-def') || '';
-          });
-          section.querySelectorAll('input[type="text"][data-def]').forEach(input => {
-            input.value = input.getAttribute('data-def') || '';
+          // Auto-fill all fields with defaults
+          fillDefaultsInContainer(section);
+          // Also check all sub-section sealed checkboxes
+          section.querySelectorAll('.subsection-header input[type="checkbox"]').forEach(subCb => {
+            subCb.checked = true;
           });
         } else {
-          // Réinitialiser les champs
-          section.querySelectorAll('input[type="checkbox"]').forEach(input => input.checked = false);
-          section.querySelectorAll('input[type="date"], input[type="number"], input[type="text"]').forEach(input => input.value = '');
+          // Reset all fields
+          resetFieldsInContainer(section);
+          // Also uncheck all sub-section sealed checkboxes
+          section.querySelectorAll('.subsection-header input[type="checkbox"]').forEach(subCb => {
+            subCb.checked = false;
+          });
         }
+      }
+
+      function toggleSubSealed(subCheckbox, sectionIdx) {
+        const subsecBlock = subCheckbox.closest('.subsection-block');
+        if (!subsecBlock) return;
+        if (subCheckbox.checked) {
+          fillDefaultsInContainer(subsecBlock);
+        } else {
+          resetFieldsInContainer(subsecBlock);
+        }
+      }
+
+      function fillDefaultsInContainer(container) {
+        container.querySelectorAll('input[type="checkbox"][data-def]').forEach(input => {
+          const def = input.getAttribute('data-def');
+          input.checked = (def === 'true' || def === 'Oui' || def === true);
+        });
+        container.querySelectorAll('input[type="date"][data-def]').forEach(input => {
+          input.value = input.getAttribute('data-def') || '';
+        });
+        container.querySelectorAll('input[type="number"][data-def]').forEach(input => {
+          input.value = input.getAttribute('data-def') || '';
+        });
+        container.querySelectorAll('input[type="text"][data-def]').forEach(input => {
+          input.value = input.getAttribute('data-def') || '';
+        });
+      }
+
+      function resetFieldsInContainer(container) {
+        container.querySelectorAll('input[type="checkbox"][data-def]').forEach(input => input.checked = false);
+        container.querySelectorAll('input[type="date"][data-def], input[type="number"][data-def], input[type="text"][data-def]').forEach(input => input.value = '');
+      }
+
+      function updateSubType(sel) {
+        const bagName = sel.dataset.bag;
+        const subType = sel.value;
+        google.script.run.withSuccessHandler(() => {
+          // Update local data
+          const item = DATA.find(d => d.name === bagName);
+          if (item) item.subType = subType;
+          showToast(subType ? 'Sous-type ' + subType + ' activé' : 'Sous-type retiré', 'success');
+        }).withFailureHandler(e => {
+          showToast('Erreur: ' + e.message, 'error');
+        }).updateBagSubType(bagName, subType);
       }
 
       function checkPhoto(category, bagName, section) {
@@ -899,7 +973,15 @@
         });
         invList.forEach(i => {
           let s = i.state === 'HS' ? `<button class="admin-btn success" onclick="setBagStatus('${i.name.replace(/'/g, "\\'")}',' Actif')">Activer</button> <button class="admin-btn danger" onclick="if(confirm('Supprimer ${i.name} ?')) delBag('${i.name.replace(/'/g, "\\'")}')">🗑️</button>` : `<button class="admin-btn secondary" onclick="setBagStatus('${i.name.replace(/'/g, "\\'")}',' HS')">HS</button> <button class="admin-btn danger" onclick="if(confirm('Supprimer ${i.name} ?')) delBag('${i.name.replace(/'/g, "\\'")}')">🗑️</button>`;
-          ib.innerHTML += `<tr data-bag="${i.name}" data-cat="${i.category}"><td class="inv-drag">↕</td><td class="order-cell">${i.order || ''}</td><td>${i.category}</td><td><b>${i.name}</b> <button class="admin-btn" style="padding:2px 6px; font-size:0.8rem; margin-left:5px;" onclick="renameBag('${i.name.replace(/'/g, "\\'")}')">✏️</button></td><td><input value="${i.mailOrange||''}" placeholder="mail1@test.com; mail2@test.com" data-bag="${i.name}" data-type="orange" onchange="updateMail(this)" style="width:100%; padding:8px; border:1px solid var(--border-color); border-radius:4px; background:var(--input-bg); color:var(--input-text);"></td><td><input value="${i.mailRed||''}" placeholder="mail1@test.com; mail2@test.com" data-bag="${i.name}" data-type="red" onchange="updateMail(this)" style="width:100%; padding:8px; border:1px solid var(--border-color); border-radius:4px; background:var(--input-bg); color:var(--input-text);"></td><td>${s}</td></tr>`;
+          // Sous-type dropdown (only for VLI category)
+          let subTypeCell = '';
+          if (i.category === 'VLI') {
+            const isVSSO = (i.subType || '').trim() === 'VSSO';
+            subTypeCell = `<select data-bag="${i.name}" onchange="updateSubType(this)" style="padding:6px; border:1px solid var(--border-color); border-radius:4px; background:var(--input-bg); color:var(--input-text);"><option value="">—</option><option value="VSSO" ${isVSSO ? 'selected' : ''}>VSSO</option></select>`;
+          } else {
+            subTypeCell = '<span style="color:#999;font-size:0.8rem;">—</span>';
+          }
+          ib.innerHTML += `<tr data-bag="${i.name}" data-cat="${i.category}"><td class="inv-drag">↕</td><td class="order-cell">${i.order || ''}</td><td>${i.category}</td><td><b>${i.name}</b> <button class="admin-btn" style="padding:2px 6px; font-size:0.8rem; margin-left:5px;" onclick="renameBag('${i.name.replace(/'/g, "\\'")}')">✏️</button></td><td>${subTypeCell}</td><td><input value="${i.mailOrange||''}" placeholder="mail1@test.com; mail2@test.com" data-bag="${i.name}" data-type="orange" onchange="updateMail(this)" style="width:100%; padding:8px; border:1px solid var(--border-color); border-radius:4px; background:var(--input-bg); color:var(--input-text);"></td><td><input value="${i.mailRed||''}" placeholder="mail1@test.com; mail2@test.com" data-bag="${i.name}" data-type="red" onchange="updateMail(this)" style="width:100%; padding:8px; border:1px solid var(--border-color); border-radius:4px; background:var(--input-bg); color:var(--input-text);"></td><td>${s}</td></tr>`;
         });
         const vliBody = document.getElementById('vli-loc-body');
         if (vliBody) {
@@ -1334,7 +1416,7 @@
              if(sec.items && sec.items.length > 0) {
                  const nbItems = sec.items.length;
                  sec.items.forEach((i, itemIdx) => {
-                    h += `<div class="item-row" data-item-idx="${itemIdx}"><span style="cursor:move; color:#999;">⋮⋮</span><input class="i-name" value="${i.name}" placeholder="Nom item" style="flex:1;"><select class="i-type"><option value="texte" ${i.type=='texte'?'selected':''}>Texte</option><option value="case" ${i.type=='case'?'selected':''}>Case</option><option value="nombre" ${i.type=='nombre'?'selected':''}>Nombre</option><option value="date" ${i.type=='date'?'selected':''}>Date</option></select><input class="i-def" value="${i.def||''}" placeholder="Défaut" style="width:80px;"><button class="admin-btn danger" style="padding:5px 8px;" onclick="deleteItemConfirm(this)">✕</button><button class="admin-btn secondary" style="padding:5px 8px;" onclick="quickSaveEditor()">💾</button></div>`;
+                    h += `<div class="item-row" data-item-idx="${itemIdx}"><span style="cursor:move; color:#999;">⋮⋮</span><input class="i-name" value="${i.name}" placeholder="Nom item" style="flex:1;"><select class="i-type"><option value="texte" ${i.type=='texte'?'selected':''}>Texte</option><option value="case" ${i.type=='case'?'selected':''}>Case</option><option value="nombre" ${i.type=='nombre'?'selected':''}>Nombre</option><option value="date" ${i.type=='date'?'selected':''}>Date</option></select><input class="i-def" value="${i.def||''}" placeholder="Défaut" style="width:80px;"><input class="i-subsec" value="${i.subsection||''}" placeholder="Sous-section" style="width:120px;"><button class="admin-btn danger" style="padding:5px 8px;" onclick="deleteItemConfirm(this)">✕</button><button class="admin-btn secondary" style="padding:5px 8px;" onclick="quickSaveEditor()">💾</button></div>`;
                  });
              }
              h += `</div><div style="padding:10px; background:var(--section-bg);"><button class="admin-btn secondary" onclick="addItem(this)">+ Item</button></div></div>`;
@@ -1422,13 +1504,14 @@
          document.querySelectorAll('.section-block').forEach(blk => {
             let s = blk.querySelector('.sec-name').value; let p = blk.querySelector('.sec-pos').value;
             blk.querySelectorAll('.item-row').forEach(row => {
-               data.push({ section: s, position: p, item: row.querySelector('input').value, type: row.querySelector('select').value, def: row.querySelectorAll('input')[1].value });
+               const inputs = row.querySelectorAll('input');
+               data.push({ section: s, position: p, item: inputs[0].value, type: row.querySelector('select').value, def: inputs[1].value, subsection: inputs[2] ? inputs[2].value : '' });
             });
          });
          google.script.run.withSuccessHandler(loadData).updateCategoryContent(cat, data);
       }
       
-      function addItem(b) { b.parentElement.previousElementSibling.innerHTML += `<div class="item-row"><span style="cursor:move; color:#999;">⋮⋮</span><input placeholder="Item" style="flex:1;"><select><option value="texte">Texte</option><option value="case">Case</option><option value="nombre">Nombre</option><option value="date">Date</option></select><input placeholder="Défaut" style="width:80px;"><button class="admin-btn danger" style="padding:5px 8px;" onclick="this.parentElement.remove()">✕</button><button class="admin-btn secondary" style="padding:5px 8px;" onclick="quickSaveEditor()">💾</button></div>`; }
+      function addItem(b) { b.parentElement.previousElementSibling.innerHTML += `<div class="item-row"><span style="cursor:move; color:#999;">⋮⋮</span><input placeholder="Item" style="flex:1;"><select><option value="texte">Texte</option><option value="case">Case</option><option value="nombre">Nombre</option><option value="date">Date</option></select><input placeholder="Défaut" style="width:80px;"><input placeholder="Sous-section" style="width:120px;"><button class="admin-btn danger" style="padding:5px 8px;" onclick="this.parentElement.remove()">✕</button><button class="admin-btn secondary" style="padding:5px 8px;" onclick="quickSaveEditor()">💾</button></div>`; }
       function addSection() { document.getElementById('editor-container').innerHTML += `<div class="section-block"><div class="section-header"><span style="cursor:move; padding:5px; color:var(--text-color);">☰</span><input value="Nouvelle Section" style="flex:1;"><input placeholder="Pos" style="width:120px;"></div><div class="items-list"></div><div style="padding:10px; background:var(--section-bg);"><button class="admin-btn secondary" onclick="addItem(this)">+ Item</button></div></div>`; }
       function showQR(n) { const u = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(APP_URL + "?bag=" + n)}`; document.getElementById('qrTitle').innerText = n; document.getElementById('qr-img').src = u; document.getElementById('qrModal').style.display = 'flex'; }
       function downloadQR() { window.open(document.getElementById('qr-img').src); }
