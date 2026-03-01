@@ -524,8 +524,10 @@
       };
 
       function fail(e) { 
+        clearTimeout(loaderTimeout);
+        document.getElementById('global-loader').style.display = 'none';
         document.getElementById('error-box').style.display = 'block'; 
-        document.getElementById('tech-error').innerText = e.message;
+        document.getElementById('tech-error').innerText = (e && e.message) ? e.message : String(e);
       }
 
       function loadData() {
@@ -535,7 +537,7 @@
             D = res.data;
             D.photoPresence = res.photoPresence || {};
             D.vliMileages = res.vliMileages || {};
-            render();
+            try { render(); } catch(renderErr) { fail({message: 'Erreur render: ' + renderErr.message}); return; }
 
             if(QR_BAG_PARAM) {
               const item = D.inventory.find(i => i.name === QR_BAG_PARAM);

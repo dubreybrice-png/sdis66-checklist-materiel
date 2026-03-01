@@ -5,7 +5,7 @@
 
 // --- CONFIGURATION ---
 const SCRIPT_PROP = PropertiesService.getScriptProperties();
-const BOOTSTRAP_SNAPSHOT_KEY = "BOOTSTRAP_SNAPSHOT_V1";
+const BOOTSTRAP_SNAPSHOT_KEY = "BOOTSTRAP_SNAPSHOT_V2";
 const PHOTO_PRESENCE_KEY = "PHOTO_PRESENCE_JSON";
 const SHEET_NAMES = {
   INVENTORY: "Inventaire",
@@ -30,17 +30,17 @@ function getAppUrl() {
 // --- BOOTSTRAP (data + photos + mileages) with short cache ---
 function getBootstrapData() {
   const cache = CacheService.getScriptCache();
-  const cached = cache.get("BOOTSTRAP_V1");
+  const cached = cache.get("BOOTSTRAP_V2");
   if (cached) return JSON.parse(cached);
 
   const snap = SCRIPT_PROP.getProperty(BOOTSTRAP_SNAPSHOT_KEY);
   if (snap) {
-    cache.put("BOOTSTRAP_V1", snap, 5);
+    cache.put("BOOTSTRAP_V2", snap, 5);
     return JSON.parse(snap);
   }
 
   const payload = rebuildBootstrapSnapshot_();
-  if (payload) cache.put("BOOTSTRAP_V1", JSON.stringify(payload), 5);
+  if (payload) cache.put("BOOTSTRAP_V2", JSON.stringify(payload), 5);
   return payload;
 }
 
@@ -92,11 +92,6 @@ function setup() {
       enablePhotos: true
     }));
   }
-  // Purger le snapshot pour forcer un rebuild au prochain chargement
-  try {
-    CacheService.getScriptCache().remove("BOOTSTRAP_V1");
-    SCRIPT_PROP.deleteProperty(BOOTSTRAP_SNAPSHOT_KEY);
-  } catch(e) {}
 }
 
 // --- DATA FETCHING (Chargement des données) ---
@@ -1133,7 +1128,7 @@ function saveVliMileage(bagName, km, dateStr) {
 
 function invalidateCache_() {
   try {
-    CacheService.getScriptCache().remove("BOOTSTRAP_V1");
+    CacheService.getScriptCache().remove("BOOTSTRAP_V2");
     rebuildBootstrapSnapshot_();
   } catch (e) {
     Logger.log("Cache invalidate error: " + e.toString());
