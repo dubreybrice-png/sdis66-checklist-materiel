@@ -27,34 +27,20 @@ function getAppUrl() {
   return ScriptApp.getService().getUrl();
 }
 
-// --- BOOTSTRAP (data + photos + mileages) with short cache ---
+// --- BOOTSTRAP (data + photos + mileages) - direct, no cache ---
 function getBootstrapData() {
-  const cache = CacheService.getScriptCache();
-  const cached = cache.get("BOOTSTRAP_V2");
-  if (cached) return JSON.parse(cached);
-
-  const snap = SCRIPT_PROP.getProperty(BOOTSTRAP_SNAPSHOT_KEY);
-  if (snap) {
-    cache.put("BOOTSTRAP_V2", snap, 5);
-    return JSON.parse(snap);
+  try {
+    const base = getData();
+    if (!base || !base.success) return base;
+    return {
+      success: true,
+      data: base.data,
+      photoPresence: getPhotoPresenceMap(),
+      vliMileages: getAllVliMileages()
+    };
+  } catch(e) {
+    return { success: false, error: e.toString() };
   }
-
-  const payload = rebuildBootstrapSnapshot_();
-  if (payload) cache.put("BOOTSTRAP_V2", JSON.stringify(payload), 5);
-  return payload;
-}
-
-function rebuildBootstrapSnapshot_() {
-  const base = getData();
-  if (!base || !base.success) return base;
-  const payload = {
-    success: true,
-    data: base.data,
-    photoPresence: getPhotoPresenceMap(),
-    vliMileages: getAllVliMileages()
-  };
-  SCRIPT_PROP.setProperty(BOOTSTRAP_SNAPSHOT_KEY, JSON.stringify(payload));
-  return payload;
 }
 
 // --- INITIALISATION ---
@@ -1127,12 +1113,7 @@ function saveVliMileage(bagName, km, dateStr) {
 }
 
 function invalidateCache_() {
-  try {
-    CacheService.getScriptCache().remove("BOOTSTRAP_V2");
-    rebuildBootstrapSnapshot_();
-  } catch (e) {
-    Logger.log("Cache invalidate error: " + e.toString());
-  }
+  // No-op: bootstrap is now direct (no cache/snapshot)
 }
 
 function getAllVliMileages() {
