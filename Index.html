@@ -369,34 +369,37 @@
            
            <button class="admin-btn success" onclick="saveMailConfDirect()" style="margin-top:20px; width:100%; padding:12px; font-size:1rem;">💾 Enregistrer les Modèles</button>
            
-           <hr style="margin:25px 0;">
-           <div style="background:var(--section-bg); padding:15px; border-radius:8px; color:var(--text-color); margin-bottom:20px;">
-             <h4 style="color:#4caf50; margin:0 0 10px 0;">🔄 Synchronisation Mails depuis Agents</h4>
-             <small style="color:var(--text-color);">Met à jour automatiquement les mails orange/rouge de chaque sac et VLI à partir du <a href="https://docs.google.com/spreadsheets/d/1bwKVm5Bto9u8lPopGxbwA3PfStJeTd159_cO-eKV4FY" target="_blank">spreadsheet des agents</a>.<br>Associe chaque sac au centre correspondant.</small>
-             <div style="margin-top:10px; display:flex; gap:10px; flex-wrap:wrap;">
-               <button class="admin-btn success" onclick="syncMailsNow()" style="flex:1; padding:12px;">🔄 Synchroniser les Mails</button>
+           <!-- ═══════ GROUPE: SYNCHRONISATION ═══════ -->
+           <div style="background:linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%); padding:20px; border-radius:12px; margin-top:25px; border:2px solid #4caf50;">
+             <h3 style="color:#2e7d32; margin:0 0 15px 0; display:flex; align-items:center; gap:8px;">🔄 Synchronisation Mails Agents</h3>
+             <small style="color:#333;">Met à jour automatiquement les mails orange/rouge de chaque sac et VLI à partir du <a href="https://docs.google.com/spreadsheets/d/1bwKVm5Bto9u8lPopGxbwA3PfStJeTd159_cO-eKV4FY" target="_blank" style="color:#1b5e20;">spreadsheet des agents</a>.<br>Associe chaque sac au centre correspondant.</small>
+             <div style="margin-top:12px; display:flex; gap:10px; flex-wrap:wrap;">
+               <button class="admin-btn success" onclick="syncMailsNow()" style="flex:1; padding:12px; font-size:1rem;">🔄 Synchroniser les Mails</button>
                <button class="admin-btn secondary" onclick="renameIadeNow()" style="padding:12px;">🏷️ Renommer IADE</button>
              </div>
              <div id="sync-result" style="margin-top:10px; padding:10px; border-radius:4px; display:none;"></div>
            </div>
 
-           <hr style="margin:25px 0;">
-           <div style="background:var(--section-bg); padding:15px; border-radius:8px; color:var(--text-color);">
-             <h4 style="color:#1565c0; margin:0 0 10px 0;">🔔 Rappel Automatique Quotidien</h4>
-             <small style="color:#1565c0;">Les alertes seront envoyées chaque jour à l'heure sélectionnée.</small>
-             <div style="margin-top:10px; display:flex; align-items:center; gap:10px;">
-               <input type="number" id="trigger-hour" value="8" style="width:70px; padding:10px; border:1px solid #1565c0; border-radius:4px;" min="0" max="23">
-               <span style="font-weight:bold;">h 00</span>
-               <button class="admin-btn" onclick="installTriggerUI()" style="flex:1;">🔔 Activer</button>
+           <!-- ═══════ GROUPE: AUTOMATISATION ALERTES ═══════ -->
+           <div style="background:linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%); padding:20px; border-radius:12px; margin-top:20px; border:2px solid #1565c0;">
+             <h3 style="color:#0d47a1; margin:0 0 15px 0; display:flex; align-items:center; gap:8px;">🔔 Rappel Automatique Quotidien</h3>
+             <small style="color:#333;">Les alertes orange/rouge seront envoyées chaque jour à l'heure choisie aux mails configurés dans l'inventaire.</small>
+             <div style="margin-top:12px; display:flex; align-items:center; gap:10px;">
+               <input type="number" id="trigger-hour" value="8" style="width:70px; padding:10px; border:2px solid #1565c0; border-radius:6px; font-size:1.1rem; font-weight:bold; text-align:center;" min="0" max="23">
+               <span style="font-weight:bold; color:#0d47a1; font-size:1.1rem;">h 00</span>
+               <button class="admin-btn" onclick="installTriggerUI()" style="flex:1; padding:12px; font-size:1rem;">🔔 Activer le rappel</button>
              </div>
+             <div id="trigger-result" style="margin-top:10px; padding:10px; border-radius:4px; display:none;"></div>
            </div>
            
-           <div style="background:var(--section-bg); padding:15px; border-radius:8px; color:var(--text-color); margin-top:15px;">
-             <h4 style="color:#f44336; margin:0 0 10px 0;">🚑 Garde PSud — Vérification Quotidienne 16h</h4>
-             <small style="color:var(--text-color);">Les véhicules de Garde PSud (ex: VLI 08) doivent être vérifiés chaque jour.<br>Si pas vérifié à 16h → alerte rouge + mail à florian.bois et brice.dubrey.</small>
-             <div style="margin-top:10px;">
-               <button class="admin-btn" onclick="installGardePSudTriggerUI()" style="width:100%; padding:12px; background:#f44336;">🚨 Activer Trigger Garde PSud (16h)</button>
+           <!-- ═══════ GROUPE: GARDE PSUD ═══════ -->
+           <div style="background:linear-gradient(135deg, #ffebee 0%, #ffcdd2 100%); padding:20px; border-radius:12px; margin-top:20px; border:2px solid #f44336;">
+             <h3 style="color:#b71c1c; margin:0 0 15px 0; display:flex; align-items:center; gap:8px;">🚑 Garde PSud — Vérification Quotidienne</h3>
+             <small style="color:#333;">Les véhicules Garde PSud (<b>VLI 08</b>, <b>VSSO PSud</b>) ont une validité de <b>1 jour</b>.<br>À 16h si non vérifié → passage en rouge + mail à florian.bois@sdis66.fr et brice.dubrey@sdis66.fr.</small>
+             <div style="margin-top:12px;">
+               <button class="admin-btn" onclick="installGardePSudTriggerUI()" style="width:100%; padding:12px; background:#f44336; font-size:1rem;">🚨 Activer Trigger Garde PSud (16h)</button>
              </div>
+             <div id="garde-psud-result" style="margin-top:10px; padding:10px; border-radius:4px; display:none;"></div>
            </div>
          </div>
       </div>
@@ -1525,8 +1528,32 @@
       }
       function saveOptions() { google.script.run.withSuccessHandler(loadData).saveGlobalOptions({ enableExpiry: document.getElementById('opt-exp').checked, enableQR: document.getElementById('opt-qr').checked, enableVerifier: document.getElementById('opt-verif').checked, enablePhotos: document.getElementById('opt-photo').checked }); }
       function saveMailConfDirect() { google.script.run.withSuccessHandler(() => alert("Sauvé")).saveMailConfig({ orangeSub: document.getElementById('mailOrangeSub2').value, orangeBody: document.getElementById('mailOrangeBody2').value, redSub: document.getElementById('mailRedSub2').value, redBody: document.getElementById('mailRedBody2').value }); }
-      function installTriggerUI() { google.script.run.withSuccessHandler(alert).installTrigger(document.getElementById('trigger-hour').value); }
-      function installGardePSudTriggerUI() { google.script.run.withSuccessHandler(res => alert(res)).installGardePSudTrigger(); }
+      function installTriggerUI() {
+        const box = document.getElementById('trigger-result');
+        box.style.display = 'block';
+        box.style.background = '#e3f2fd'; box.style.color = '#1565c0';
+        box.innerHTML = '<div class="mini-spinner"></div> Activation en cours...';
+        google.script.run.withSuccessHandler(res => {
+          box.style.background = '#e8f5e9'; box.style.color = '#2e7d32'; box.style.fontWeight = 'bold';
+          box.innerHTML = '✅ ' + (res || 'Rappel automatique activé!');
+        }).withFailureHandler(err => {
+          box.style.background = '#ffebee'; box.style.color = '#c62828';
+          box.innerHTML = '❌ Erreur: ' + err;
+        }).installTrigger(document.getElementById('trigger-hour').value);
+      }
+      function installGardePSudTriggerUI() {
+        const box = document.getElementById('garde-psud-result');
+        box.style.display = 'block';
+        box.style.background = '#ffebee'; box.style.color = '#b71c1c';
+        box.innerHTML = '<div class="mini-spinner"></div> Activation en cours...';
+        google.script.run.withSuccessHandler(res => {
+          box.style.background = '#e8f5e9'; box.style.color = '#2e7d32'; box.style.fontWeight = 'bold';
+          box.innerHTML = '✅ ' + (res || 'Trigger Garde PSud activé!');
+        }).withFailureHandler(err => {
+          box.style.background = '#ffebee'; box.style.color = '#c62828';
+          box.innerHTML = '❌ Erreur: ' + err;
+        }).installGardePSudTrigger();
+      }
       function syncMailsNow() {
         const box = document.getElementById('sync-result');
         box.style.display = 'block';

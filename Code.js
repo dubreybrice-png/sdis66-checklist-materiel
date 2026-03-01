@@ -268,6 +268,14 @@ function saveCheck(bagName, formData, nextItemName, nextItemDate, verifierName, 
     }
   }
   
+  // Garde PSud: fréquence forcée à 1 jour
+  const bagLocation = (data[bagRowIndex - 1][11] || "").trim();
+  const bagSubType = (data[bagRowIndex - 1][13] || "").trim();
+  const isGardePSud_ = bagName === "VLI 08" 
+    || normalizeCenter_(bagLocation) === "garde psud"
+    || (bagSubType === "VSSO" && normalizeCenter_(bagLocation) === "perpignan sud");
+  if (isGardePSud_) currentFreq = 1;
+  
   const now = new Date();
   const next = new Date();
   next.setDate(now.getDate() + currentFreq);
@@ -1272,8 +1280,10 @@ function checkGardePSudAlerts() {
     const lastDate = data[i][2];
     
     // Déterminer si c'est un véhicule Garde PSud
+    const subType = (data[i][13] || "").trim();
     const isGardePSud = normalizeCenter_(location) === "garde psud" 
-                     || name === "VLI 08";
+                     || name === "VLI 08"
+                     || (subType === "VSSO" && normalizeCenter_(location) === "perpignan sud");
     
     if (!isGardePSud || state === "HS") continue;
     
