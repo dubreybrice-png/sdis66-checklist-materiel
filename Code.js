@@ -5,7 +5,7 @@
 
 // --- CONFIGURATION ---
 const SCRIPT_PROP = PropertiesService.getScriptProperties();
-const BOOTSTRAP_SNAPSHOT_KEY = "BOOTSTRAP_SNAPSHOT_V2";
+const BOOTSTRAP_SNAPSHOT_KEY = "BOOTSTRAP_SNAPSHOT_V1";
 const PHOTO_PRESENCE_KEY = "PHOTO_PRESENCE_JSON";
 const SHEET_NAMES = {
   INVENTORY: "Inventaire",
@@ -27,20 +27,34 @@ function getAppUrl() {
   return ScriptApp.getService().getUrl();
 }
 
-// --- BOOTSTRAP (data + photos + mileages) - direct, no cache ---
+// --- BOOTSTRAP (data + photos + mileages) with short cache ---
 function getBootstrapData() {
-  try {
-    const base = getData();
-    if (!base || !base.success) return base;
-    return {
-      success: true,
-      data: base.data,
-      photoPresence: getPhotoPresenceMap(),
-      vliMileages: getAllVliMileages()
-    };
-  } catch(e) {
-    return { success: false, error: e.toString() };
+  const cache = CacheService.getScriptCache();
+  const cached = cache.get("BOOTSTRAP_V1");
+  if (cached) return JSON.parse(cached);
+
+  const snap = SCRIPT_PROP.getProperty(BOOTSTRAP_SNAPSHOT_KEY);
+  if (snap) {
+    cache.put("BOOTSTRAP_V1", snap, 5);
+    return JSON.parse(snap);
   }
+
+  const payload = rebuildBootstrapSnapshot_();
+  if (payload) cache.put("BOOTSTRAP_V1", JSON.stringify(payload), 5);
+  return payload;
+}
+
+function rebuildBootstrapSnapshot_() {
+  const base = getData();
+  if (!base || !base.success) return base;
+  const payload = {
+    success: true,
+    data: base.data,
+    photoPresence: getPhotoPresenceMap(),
+    vliMileages: getAllVliMileages()
+  };
+  SCRIPT_PROP.setProperty(BOOTSTRAP_SNAPSHOT_KEY, JSON.stringify(payload));
+  return payload;
 }
 
 // --- INITIALISATION ---
@@ -147,10 +161,6 @@ function getData() {
     let forms = {};
     const savedForms = SCRIPT_PROP.getProperty("FORMS_JSON");
     if (savedForms) forms = JSON.parse(savedForms);
-    if (!forms["VSSO"]) {
-      forms["VSSO"] = [{ section: "Équipement VSSO", position: "", items: [{ name: "À définir", type: "case", def: "true" }] }];
-      SCRIPT_PROP.setProperty("FORMS_JSON", JSON.stringify(forms));
-    }
     
     // 4. Historique
     const histSheet = ss.getSheetByName(SHEET_NAMES.HISTORY);
@@ -620,10 +630,10 @@ function addBag(cat, name) {
 }
 
 function updateBagSubType(name, subType) {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const s = ss.getSheetByName(SHEET_NAMES.INVENTORY);
-  const data = s.getDataRange().getValues();
-  for (let i = 1; i < data.length; i++) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var s = ss.getSheetByName(SHEET_NAMES.INVENTORY);
+  var data = s.getDataRange().getValues();
+  for (var i = 1; i < data.length; i++) {
     if (data[i][1] == name) {
       s.getRange(i + 1, 14).setValue(subType || "");
       break;
@@ -851,8 +861,7 @@ function updateCategoryContent(catName, dataJson) {
       groups[row.section].items.push({
         name: row.item,
         type: row.type,
-        def: row.def,
-        subsection: row.subsection || ""
+        def: row.def
       });
     }
   });
@@ -1113,7 +1122,12 @@ function saveVliMileage(bagName, km, dateStr) {
 }
 
 function invalidateCache_() {
-  // No-op: bootstrap is now direct (no cache/snapshot)
+  try {
+    CacheService.getScriptCache().remove("BOOTSTRAP_V1");
+    rebuildBootstrapSnapshot_();
+  } catch (e) {
+    Logger.log("Cache invalidate error: " + e.toString());
+  }
 }
 
 function getAllVliMileages() {
