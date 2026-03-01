@@ -35,7 +35,7 @@
       .spinner { border: 8px solid #f3f3f3; border-top: 8px solid #1565c0; border-radius: 50%; width: 50px; height: 50px; animation: spin 1s linear infinite; margin-bottom: 15px; }
       .mini-spinner { border: 4px solid #e0e0e0; border-top: 4px solid #1565c0; border-radius: 50%; width: 22px; height: 22px; animation: spin 1s linear infinite; display: inline-block; }
       @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-      #error-box { display: none; background: #ffebee; color: #c62828; border: 1px solid #c62828; padding: 20px; border-radius: 8px; margin: 20px; text-align: center; }
+      #error-box { display: none; background: #ffebee; color: #c62828; border: 1px solid #c62828; padding: 20px; border-radius: 8px; margin: 20px auto; text-align: center; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 10000; max-width: 400px; box-shadow: 0 4px 20px rgba(0,0,0,0.3); }
 
       .stats-bar { background-color: #263238; color: white; padding: 12px 20px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; font-size: 0.9rem; }
       .container { padding: 20px; }
@@ -190,11 +190,11 @@
     <div id="global-loader">
       <div class="spinner"></div>
       <div style="font-weight:bold;">Chargement...</div>
-      <div id="error-box">
-        <h3 style="margin-top:0;">⚠️ Problème technique</h3>
-        <p id="tech-error">Le serveur ne répond pas.</p>
-        <button class="header-btn" style="background:#d32f2f; margin: 0 auto;" onclick="forceReload()">🔄 Recharger l'application</button>
-      </div>
+    </div>
+    <div id="error-box">
+      <h3 style="margin-top:0;">⚠️ Problème technique</h3>
+      <p id="tech-error">Le serveur ne répond pas.</p>
+      <button class="header-btn" style="background:#d32f2f; margin: 0 auto;" onclick="forceReload()">🔄 Recharger l'application</button>
     </div>
 
     <div class="top-header">
@@ -520,7 +520,8 @@
       }, 15000);
 
       window.onload = function() { 
-        google.script.run.withSuccessHandler(u => { APP_URL=u; loadData(); }).withFailureHandler(fail).getAppUrl(); 
+        google.script.run.withSuccessHandler(function(u) { APP_URL=u; }).getAppUrl(); 
+        loadData();
       };
 
       function fail(e) { 
