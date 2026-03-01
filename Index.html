@@ -247,7 +247,7 @@
              </div>
            </div>
           <table class="inv-table">
-            <thead><tr><th>↕</th><th>N°</th><th>Catégorie</th><th>Nom</th><th>Sous-type</th><th>Mails Orange</th><th>Mails Rouge</th><th>Action</th></tr></thead>
+            <thead><tr><th>↕</th><th>N°</th><th>Catégorie</th><th>Nom</th><th>Mails Orange</th><th>Mails Rouge</th><th>Action</th></tr></thead>
              <tbody id="inv-body"></tbody>
            </table>
          </div>
@@ -625,14 +625,6 @@
         renderAdmin(); renderStats(); renderEditor();
       }
 
-      function updateSubType(el) {
-        var bag = el.getAttribute('data-bag');
-        var val = el.value;
-        var item = D.inventory.find(function(x) { return x.name === bag; });
-        if (item) item.subType = val;
-        google.script.run.updateBagSubType(bag, val);
-      }
-
       function openCheck(item) {
         CURR = item; 
         MODAL_OPEN_TIME = Date.now(); // Enregistrer le timestamp d'ouverture
@@ -644,9 +636,8 @@
         document.getElementById('extra-fields').style.display = D.options.enableExpiry ? 'block' : 'none';
         document.getElementById('verif-field').style.display = D.options.enableVerifier ? 'block' : 'none';
         const b = document.getElementById('m-body'); b.innerHTML = "";
-        var formKey = (item.category === 'VLI' && item.subType === 'VSSO') ? 'VSSO' : item.category;
-        if(D.forms && D.forms[formKey]) {
-           D.forms[formKey].forEach((sec, secIdx) => {
+        if(D.forms && D.forms[item.category]) {
+           D.forms[item.category].forEach((sec, secIdx) => {
               let p = sec.position ? `<span class="zone-pos">${sec.position}</span>` : "";
               const photoKey = makePhotoKey(item.category, item.name, sec.section);
               const hasPhoto = checkPhotoPresence(photoKey);
@@ -908,8 +899,7 @@
         });
         invList.forEach(i => {
           let s = i.state === 'HS' ? `<button class="admin-btn success" onclick="setBagStatus('${i.name.replace(/'/g, "\\'")}',' Actif')">Activer</button> <button class="admin-btn danger" onclick="if(confirm('Supprimer ${i.name} ?')) delBag('${i.name.replace(/'/g, "\\'")}')">🗑️</button>` : `<button class="admin-btn secondary" onclick="setBagStatus('${i.name.replace(/'/g, "\\'")}',' HS')">HS</button> <button class="admin-btn danger" onclick="if(confirm('Supprimer ${i.name} ?')) delBag('${i.name.replace(/'/g, "\\'")}')">🗑️</button>`;
-          var stCell = (i.category === 'VLI') ? `<td><select data-bag="${i.name}" onchange="updateSubType(this)" style="padding:6px; border:1px solid var(--border-color); border-radius:4px; background:var(--input-bg); color:var(--input-text);"><option value="">Standard</option><option value="VSSO" ${i.subType==='VSSO'?'selected':''}>VSSO</option></select></td>` : `<td style="color:#999; text-align:center;">—</td>`;
-          ib.innerHTML += `<tr data-bag="${i.name}" data-cat="${i.category}"><td class="inv-drag">↕</td><td class="order-cell">${i.order || ''}</td><td>${i.category}</td><td><b>${i.name}</b> <button class="admin-btn" style="padding:2px 6px; font-size:0.8rem; margin-left:5px;" onclick="renameBag('${i.name.replace(/'/g, "\\'")}')">✏️</button></td>${stCell}<td><input value="${i.mailOrange||''}" placeholder="mail1@test.com; mail2@test.com" data-bag="${i.name}" data-type="orange" onchange="updateMail(this)" style="width:100%; padding:8px; border:1px solid var(--border-color); border-radius:4px; background:var(--input-bg); color:var(--input-text);"></td><td><input value="${i.mailRed||''}" placeholder="mail1@test.com; mail2@test.com" data-bag="${i.name}" data-type="red" onchange="updateMail(this)" style="width:100%; padding:8px; border:1px solid var(--border-color); border-radius:4px; background:var(--input-bg); color:var(--input-text);"></td><td>${s}</td></tr>`;
+          ib.innerHTML += `<tr data-bag="${i.name}" data-cat="${i.category}"><td class="inv-drag">↕</td><td class="order-cell">${i.order || ''}</td><td>${i.category}</td><td><b>${i.name}</b> <button class="admin-btn" style="padding:2px 6px; font-size:0.8rem; margin-left:5px;" onclick="renameBag('${i.name.replace(/'/g, "\\'")}')">✏️</button></td><td><input value="${i.mailOrange||''}" placeholder="mail1@test.com; mail2@test.com" data-bag="${i.name}" data-type="orange" onchange="updateMail(this)" style="width:100%; padding:8px; border:1px solid var(--border-color); border-radius:4px; background:var(--input-bg); color:var(--input-text);"></td><td><input value="${i.mailRed||''}" placeholder="mail1@test.com; mail2@test.com" data-bag="${i.name}" data-type="red" onchange="updateMail(this)" style="width:100%; padding:8px; border:1px solid var(--border-color); border-radius:4px; background:var(--input-bg); color:var(--input-text);"></td><td>${s}</td></tr>`;
         });
         const vliBody = document.getElementById('vli-loc-body');
         if (vliBody) {
