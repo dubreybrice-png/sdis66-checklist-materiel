@@ -283,9 +283,10 @@
          <div class="admin-card">
            <select id="cat-selector" onchange="renderEditor()" style="width:100%; padding:10px; margin-bottom:15px;"></select>
            <div id="editor-container"></div>
-           <div style="display:flex; gap:10px; margin-top:20px;">
+           <div id="editor-status" style="text-align:center; padding:8px; font-weight:bold; font-size:0.9rem;"></div>
+           <div style="display:flex; gap:10px; margin-top:10px;">
              <button class="admin-btn secondary" style="flex:1;" onclick="addSection()">+ Section</button>
-             <button class="admin-btn success" style="flex:1;" onclick="saveEditor()">💾 Sauvegarder Checklist</button>
+             <button class="admin-btn success" style="flex:1;" onclick="editorSaving=true;var es=document.getElementById('editor-status');if(es){es.style.color='#ff9800';es.textContent='\u23f3 Enregistrement en cours...';}saveEditor()">💾 Sauvegarder Checklist</button>
            </div>
          </div>
       </div>
@@ -1377,6 +1378,7 @@
              onEnd: function() { quickSaveEditor(); }
            });
          });
+         var es=document.getElementById('editor-status'); if(es&&editorSaving){es.style.color='#4caf50';es.textContent='\u2705 Enregistr\u00e9 !';editorSaving=false;setTimeout(function(){if(es)es.textContent='';},3000);}
       }
       
       function moveSectionUp(idx) {
@@ -1436,7 +1438,8 @@
         }
       }
       
-      function quickSaveEditor() { saveEditor(); }
+      var editorSaving = false;
+      function quickSaveEditor() { editorSaving=true; var es=document.getElementById('editor-status'); if(es){es.style.color='#ff9800';es.textContent='\u23f3 Enregistrement en cours...';} saveEditor(); }
 
       function saveEditor() {
          const cat = document.getElementById('cat-selector').value; let data = [];
