@@ -1033,6 +1033,309 @@ function checkDailyAlerts() {
 }
 
 // ===================================================================
+// === SYNC MAILS FROM AGENT SPREADSHEET ===
+// ===================================================================
+
+const AGENT_SPREADSHEET_ID = "1bwKVm5Bto9u8lPopGxbwA3PfStJeTd159_cO-eKV4FY";
+
+/**
+ * Lit le spreadsheet agents et retourne un objet { centerName: [email1, email2, ...] }
+ */
+function getAgentEmailsByCenter_() {
+  const agentSS = SpreadsheetApp.openById(AGENT_SPREADSHEET_ID);
+  const sheet = agentSS.getSheets()[0];
+  const data = sheet.getDataRange().getValues();
+  const map = {};
+
+  for (let i = 1; i < data.length; i++) {
+    const email = (data[i][3] || "").trim();
+    if (!email) continue;
+    const main = (data[i][1] || "").trim();
+    const secondary = (data[i][2] || "").trim();
+
+    [main, secondary].forEach(center => {
+      if (!center) return;
+      const key = normalizeCenter_(center);
+      if (!map[key]) map[key] = [];
+      if (!map[key].includes(email)) map[key].push(email);
+    });
+  }
+  return map;
+}
+
+/**
+ * Retourne un objet { "NOM_DE_FAMILLE_NORMALISE": email } pour lookup IADE
+ */
+function getAgentEmailByLastName_() {
+  const agentSS = SpreadsheetApp.openById(AGENT_SPREADSHEET_ID);
+  const sheet = agentSS.getSheets()[0];
+  const data = sheet.getDataRange().getValues();
+  const map = {};
+
+  for (let i = 1; i < data.length; i++) {
+    const fullName = (data[i][0] || "").trim();
+    const email = (data[i][3] || "").trim();
+    if (!fullName || !email) continue;
+    // Le nom est "NOM Prénom" — on prend le premier mot
+    const lastName = fullName.split(/\s+/)[0].toUpperCase();
+    map[lastName] = email;
+  }
+  return map;
+}
+
+/**
+ * Normalise un nom de centre pour le matching
+ */
+function normalizeCenter_(name) {
+  if (!name) return "";
+  let n = name.trim();
+  // Table d'aliases
+  const ALIASES = {
+    "le boulou": "boulou",
+    "pnord": "perpignan nord",
+    "p nord": "perpignan nord",
+    "psud": "perpignan sud",
+    "p sud": "perpignan sud",
+    "pouest": "perpignan ouest",
+    "p ouest": "perpignan ouest",
+    "garde psud": "garde psud",
+    "st cyprien": "saint cyprien",
+    "st paul de fenouillet": "saint paul de fenouillet",
+    "vinça": "vinca",
+    "ille": "ille sur tet",
+    "côte vermeille": "cote vermeille"
+  };
+  const lower = n.toLowerCase();
+  if (ALIASES[lower]) return ALIASES[lower];
+  // Normalisation accent
+  return lower.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+}
+
+/**
+ * Extrait le nom du centre depuis le nom du sac/VLI
+ * - SAC ISP: "Sac ISP Elne 1" → "elne"
+ * - SAC RESERVE: "Sac Réserve Millas 1" → "millas"
+ * - VLI: utilise le champ location
+ * - SAC IADE: utilise le nom de famille pour lookup direct
+ */
+function extractCenterFromBag_(name, category, location) {
+  if (category === "VLI") {
+    return normalizeCenter_(location || "");
+  }
+  if (category === "SAC ISP" || category === "SAC RESERVE") {
+    // Enlever le préfixe catégorie et le numéro à la fin
+    let clean = name;
+    // Supprimer les préfixes courants
+    clean = clean.replace(/^sac\s+(isp|reserve|réserve)\s+/i, "");
+    // Supprimer le numéro final (ex: " 1", " 2")
+    clean = clean.replace(/\s+\d+$/, "");
+    return normalizeCenter_(clean.trim());
+  }
+  return "";
+}
+
+/**
+ * Synchronise les mails orange et rouge de tout l'inventaire
+ * depuis le spreadsheet des agents.
+ * Appelé manuellement ou par trigger.
+ */
+function syncMailsFromAgentSheet() {
+  try {
+    const centerEmails = getAgentEmailsByCenter_();
+    const lastNameEmails = getAgentEmailByLastName_();
+    
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const inv = ss.getSheetByName(SHEET_NAMES.INVENTORY);
+    const data = inv.getDataRange().getValues();
+    
+    let updated = 0;
+    
+    for (let i = 1; i < data.length; i++) {
+      const category = (data[i][0] || "").trim();
+      const name = (data[i][1] || "").trim();
+      const location = (data[i][11] || "").trim();
+      
+      let mails = "";
+      
+      // === CAS SPÉCIAUX VLI ===
+      if (name === "VLI 05") {
+        mails = "florian.bois@sdis66.fr; brice.dubrey@sdis66.fr";
+      }
+      else if (name === "VLI 08") {
+        // Garde PSud — mails gérés par checkGardePSudAlerts()
+        mails = "florian.bois@sdis66.fr; brice.dubrey@sdis66.fr";
+      }
+      // === SAC IADE — mail personnel ===
+      else if (category === "SAC IADE") {
+        // Extraire le nom de famille du nom du sac: "Sac IADE Bedu" → "BEDU"
+        const iadeMatch = name.match(/sac\s+iade\s+(.+)/i);
+        if (iadeMatch) {
+          const lastName = iadeMatch[1].trim().toUpperCase();
+          // Chercher dans les variantes (avec/sans espaces, tirets)
+          for (let key in lastNameEmails) {
+            if (key === lastName || key.startsWith(lastName) || lastName.startsWith(key)) {
+              mails = lastNameEmails[key];
+              break;
+            }
+          }
+        }
+      }
+      // === SAC ISP / SAC RESERVE / VLI — par centre ===
+      else {
+        const center = extractCenterFromBag_(name, category, location);
+        if (center && centerEmails[center]) {
+          mails = centerEmails[center].join("; ");
+        }
+      }
+      
+      if (mails) {
+        inv.getRange(i + 1, 9).setValue(mails);   // Mail_Orange
+        inv.getRange(i + 1, 10).setValue(mails);  // Mail_Red
+        updated++;
+      }
+    }
+    
+    invalidateCache_();
+    return { success: true, message: "✅ " + updated + " sacs/VLI mis à jour avec les mails des agents." };
+  } catch (e) {
+    return { success: false, error: e.toString() };
+  }
+}
+
+// ===================================================================
+// === RENAME IADE BAGS (one-time migration) ===
+// ===================================================================
+
+function renameIadeBags() {
+  const IADE_RENAME = {
+    "Iade 1": "Sac IADE Bedu",
+    "Iade 2": "Sac IADE Comas",
+    "Iade 3": "Sac IADE Le Roy",
+    "Iade 4": "Sac IADE Petipre",
+    "Iade 5": "Sac IADE Py",
+    "Iade 6": "Sac IADE Spilemont"
+    // 7 et 8 restent comme ça
+  };
+  
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const inv = ss.getSheetByName(SHEET_NAMES.INVENTORY);
+  const data = inv.getDataRange().getValues();
+  let renamed = 0;
+  
+  for (let i = 1; i < data.length; i++) {
+    const name = (data[i][1] || "").trim();
+    if (IADE_RENAME[name]) {
+      inv.getRange(i + 1, 2).setValue(IADE_RENAME[name]);
+      renamed++;
+    }
+  }
+  
+  // Aussi renommer dans l'historique
+  const hist = ss.getSheetByName(SHEET_NAMES.HISTORY);
+  if (hist && hist.getLastRow() > 1) {
+    const histData = hist.getDataRange().getValues();
+    for (let i = 1; i < histData.length; i++) {
+      const hName = (histData[i][1] || "").trim();
+      if (IADE_RENAME[hName]) {
+        hist.getRange(i + 1, 2).setValue(IADE_RENAME[hName]);
+      }
+    }
+  }
+  
+  invalidateCache_();
+  return "✅ " + renamed + " sacs IADE renommés.";
+}
+
+// ===================================================================
+// === GARDE PSUD — Vérification quotidienne 16h ===
+// ===================================================================
+
+/**
+ * Vérifie les véhicules Garde PSud (ex: VLI 08).
+ * Si pas vérifié aujourd'hui à 16h → rouge + mail.
+ * À appeler via trigger à 16h.
+ */
+function checkGardePSudAlerts() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const inv = ss.getSheetByName(SHEET_NAMES.INVENTORY);
+  const data = inv.getDataRange().getValues();
+  const today = new Date();
+  const todayStr = Utilities.formatDate(today, "Europe/Paris", "dd/MM/yyyy");
+  
+  const GARDE_PSUD_MAILS = "florian.bois@sdis66.fr; brice.dubrey@sdis66.fr";
+  
+  // Identifier les véhicules Garde PSud par localisation
+  for (let i = 1; i < data.length; i++) {
+    const name = (data[i][1] || "").trim();
+    const location = (data[i][11] || "").trim();
+    const state = (data[i][10] || "").trim();
+    const lastDate = data[i][2];
+    
+    // Déterminer si c'est un véhicule Garde PSud
+    const isGardePSud = normalizeCenter_(location) === "garde psud" 
+                     || name === "VLI 08";
+    
+    if (!isGardePSud || state === "HS") continue;
+    
+    // Vérifier si contrôlé aujourd'hui
+    let checkedToday = false;
+    if (lastDate) {
+      const ld = new Date(lastDate);
+      const ldStr = Utilities.formatDate(ld, "Europe/Paris", "dd/MM/yyyy");
+      checkedToday = (ldStr === todayStr);
+    }
+    
+    if (!checkedToday) {
+      // Passer en rouge
+      inv.getRange(i + 1, 5).setValue("red");
+      
+      // Envoyer alerte
+      try {
+        MailApp.sendEmail(
+          GARDE_PSUD_MAILS,
+          "🔴 ALERTE GARDE PSUD — " + name + " non vérifié aujourd'hui!",
+          "ATTENTION!\n\n" +
+          "Le véhicule " + name + " (Garde PSud) n'a PAS été vérifié aujourd'hui.\n\n" +
+          "La vérification quotidienne est OBLIGATOIRE pour les véhicules de Garde PSud.\n\n" +
+          "Merci d'agir immédiatement."
+        );
+      } catch(e) {
+        console.log("Erreur envoi mail Garde PSud: " + e);
+      }
+    } else {
+      // Vérifié aujourd'hui → vert
+      inv.getRange(i + 1, 5).setValue("green");
+      // Prochain contrôle = demain
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      inv.getRange(i + 1, 4).setValue(tomorrow);
+    }
+  }
+  
+  invalidateCache_();
+}
+
+/**
+ * Installe le trigger Garde PSud à 16h
+ */
+function installGardePSudTrigger() {
+  const triggers = ScriptApp.getProjectTriggers();
+  for (let i = 0; i < triggers.length; i++) {
+    if (triggers[i].getHandlerFunction() === 'checkGardePSudAlerts') {
+      ScriptApp.deleteTrigger(triggers[i]);
+    }
+  }
+  
+  ScriptApp.newTrigger('checkGardePSudAlerts')
+      .timeBased()
+      .everyDays(1)
+      .atHour(16)
+      .create();
+      
+  return "✅ Trigger Garde PSud activé — vérification quotidienne à 16h.";
+}
+
+// ===================================================================
 // === VLI IMPACT PHOTOS SYSTEM ===
 // ===================================================================
 

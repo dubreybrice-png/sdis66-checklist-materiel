@@ -370,6 +370,17 @@
            <button class="admin-btn success" onclick="saveMailConfDirect()" style="margin-top:20px; width:100%; padding:12px; font-size:1rem;">💾 Enregistrer les Modèles</button>
            
            <hr style="margin:25px 0;">
+           <div style="background:var(--section-bg); padding:15px; border-radius:8px; color:var(--text-color); margin-bottom:20px;">
+             <h4 style="color:#4caf50; margin:0 0 10px 0;">🔄 Synchronisation Mails depuis Agents</h4>
+             <small style="color:var(--text-color);">Met à jour automatiquement les mails orange/rouge de chaque sac et VLI à partir du <a href="https://docs.google.com/spreadsheets/d/1bwKVm5Bto9u8lPopGxbwA3PfStJeTd159_cO-eKV4FY" target="_blank">spreadsheet des agents</a>.<br>Associe chaque sac au centre correspondant.</small>
+             <div style="margin-top:10px; display:flex; gap:10px; flex-wrap:wrap;">
+               <button class="admin-btn success" onclick="syncMailsNow()" style="flex:1; padding:12px;">🔄 Synchroniser les Mails</button>
+               <button class="admin-btn secondary" onclick="renameIadeNow()" style="padding:12px;">🏷️ Renommer IADE</button>
+             </div>
+             <div id="sync-result" style="margin-top:10px; padding:10px; border-radius:4px; display:none;"></div>
+           </div>
+
+           <hr style="margin:25px 0;">
            <div style="background:var(--section-bg); padding:15px; border-radius:8px; color:var(--text-color);">
              <h4 style="color:#1565c0; margin:0 0 10px 0;">🔔 Rappel Automatique Quotidien</h4>
              <small style="color:#1565c0;">Les alertes seront envoyées chaque jour à l'heure sélectionnée.</small>
@@ -377,6 +388,14 @@
                <input type="number" id="trigger-hour" value="8" style="width:70px; padding:10px; border:1px solid #1565c0; border-radius:4px;" min="0" max="23">
                <span style="font-weight:bold;">h 00</span>
                <button class="admin-btn" onclick="installTriggerUI()" style="flex:1;">🔔 Activer</button>
+             </div>
+           </div>
+           
+           <div style="background:var(--section-bg); padding:15px; border-radius:8px; color:var(--text-color); margin-top:15px;">
+             <h4 style="color:#f44336; margin:0 0 10px 0;">🚑 Garde PSud — Vérification Quotidienne 16h</h4>
+             <small style="color:var(--text-color);">Les véhicules de Garde PSud (ex: VLI 08) doivent être vérifiés chaque jour.<br>Si pas vérifié à 16h → alerte rouge + mail à florian.bois et brice.dubrey.</small>
+             <div style="margin-top:10px;">
+               <button class="admin-btn" onclick="installGardePSudTriggerUI()" style="width:100%; padding:12px; background:#f44336;">🚨 Activer Trigger Garde PSud (16h)</button>
              </div>
            </div>
          </div>
@@ -1507,6 +1526,37 @@
       function saveOptions() { google.script.run.withSuccessHandler(loadData).saveGlobalOptions({ enableExpiry: document.getElementById('opt-exp').checked, enableQR: document.getElementById('opt-qr').checked, enableVerifier: document.getElementById('opt-verif').checked, enablePhotos: document.getElementById('opt-photo').checked }); }
       function saveMailConfDirect() { google.script.run.withSuccessHandler(() => alert("Sauvé")).saveMailConfig({ orangeSub: document.getElementById('mailOrangeSub2').value, orangeBody: document.getElementById('mailOrangeBody2').value, redSub: document.getElementById('mailRedSub2').value, redBody: document.getElementById('mailRedBody2').value }); }
       function installTriggerUI() { google.script.run.withSuccessHandler(alert).installTrigger(document.getElementById('trigger-hour').value); }
+      function installGardePSudTriggerUI() { google.script.run.withSuccessHandler(res => alert(res)).installGardePSudTrigger(); }
+      function syncMailsNow() {
+        const box = document.getElementById('sync-result');
+        box.style.display = 'block';
+        box.style.background = '#e3f2fd';
+        box.style.color = '#1565c0';
+        box.innerHTML = '<div class="mini-spinner"></div> Synchronisation en cours...';
+        google.script.run.withSuccessHandler(res => {
+          if (res && res.success) {
+            box.style.background = '#e8f5e9';
+            box.style.color = '#2e7d32';
+            box.innerHTML = res.message;
+            loadData();
+          } else {
+            box.style.background = '#ffebee';
+            box.style.color = '#c62828';
+            box.innerHTML = '❌ Erreur: ' + (res ? res.error : 'Pas de réponse');
+          }
+        }).withFailureHandler(err => {
+          box.style.background = '#ffebee';
+          box.style.color = '#c62828';
+          box.innerHTML = '❌ Erreur: ' + err;
+        }).syncMailsFromAgentSheet();
+      }
+      function renameIadeNow() {
+        if (!confirm('Renommer les sacs IADE ?\n\nIade 1 → Sac IADE Bedu\nIade 2 → Sac IADE Comas\nIade 3 → Sac IADE Le Roy\nIade 4 → Sac IADE Petipre\nIade 5 → Sac IADE Py\nIade 6 → Sac IADE Spilemont')) return;
+        google.script.run.withSuccessHandler(res => {
+          alert(res);
+          loadData();
+        }).renameIadeBags();
+      }
       function updateMail(i) { google.script.run.updateBagMails(i.dataset.bag, i.dataset.type, i.value); }
       function saveAllVliLocations() {
         const list = [];
