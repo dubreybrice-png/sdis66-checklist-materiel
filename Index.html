@@ -71,6 +71,14 @@
       .cam-icon-btn { cursor: pointer; font-size: 1.2rem; filter: drop-shadow(1px 1px 2px rgba(0,0,0,0.2)); transition: transform 0.2s; position: relative; display: inline-block; }
       .cam-icon-btn:hover { transform: scale(1.1); }
 
+      .subsection-group { margin: 8px 6px; border-radius: 8px; overflow: hidden; border: 1px solid rgba(66,165,245,0.3); }
+      .subsection-header { padding: 8px 12px; font-weight: bold; font-size: 0.88rem; color: white; background: linear-gradient(135deg, #42a5f5 0%, #1e88e5 100%); display: flex; align-items: center; gap: 6px; }
+      body.dark-mode .subsection-header { background: linear-gradient(135deg, #1565c0 0%, #0d47a1 100%); }
+      .subsection-group .form-row { background: rgba(66,165,245,0.06); }
+      .subsection-group .form-row:last-child { border-bottom: none; }
+      body.dark-mode .subsection-group { border-color: rgba(66,165,245,0.25); }
+      body.dark-mode .subsection-group .form-row { background: rgba(66,165,245,0.08); }
+
       .form-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; border-bottom: 1px solid var(--border-color); background: var(--card-bg); color: var(--text-color); font-size: 0.9rem; }
       .form-input-container { flex: 0 0 40%; display: flex; justify-content: flex-end; align-items: center; max-width: 250px; }
       .form-input-container input:not([type="checkbox"]) { width: 100%; max-width: 180px; padding: 6px; border: 1px solid var(--border-color); border-radius: 4px; box-sizing: border-box; text-align: right; background-color: var(--input-bg); color: var(--input-text); font-size: 0.9rem; }
@@ -680,18 +688,33 @@
                 `<span class="cam-icon-btn" onclick="checkPhoto('${item.category}', '${item.name}', '${sec.section}')" data-photo-key="${photoKey}">📷<span class="photo-badge ${badgeClass}">${badgeText}</span></span>` : '';
               let sealedCheckbox = `<label class="sealed-checkbox"><input type="checkbox" onchange="toggleSealed(${secIdx})"> Scellé</label>`;
               let h = `<div class="check-zone"><div class="check-zone-header"><span>${sec.section}</span><div class="zone-pos-container">${sealedCheckbox}${photoIcon}${p}</div></div><div class="check-zone-content" data-section="${secIdx}">`;
-              let lastSub = '';
-              sec.items.forEach(it => {
-                 if (it.subsection && it.subsection !== lastSub) {
-                   h += `<div style="padding:6px 10px; margin:6px 0 2px; background:var(--section-bg); border-left:3px solid #42a5f5; font-weight:bold; font-size:0.85rem; color:var(--text-color);">${it.subsection}</div>`;
-                   lastSub = it.subsection;
+              let lastSub = null;
+              let inSubGroup = false;
+              sec.items.forEach((it, itIdx) => {
+                 const curSub = it.subsection || '';
+                 const nextSub = (itIdx + 1 < sec.items.length) ? (sec.items[itIdx + 1].subsection || '') : '';
+                 // Fermer le groupe précédent si on change de sous-section
+                 if (inSubGroup && curSub !== lastSub) {
+                   h += '</div>';
+                   inSubGroup = false;
                  }
+                 // Ouvrir un nouveau groupe si sous-section non vide et nouveau
+                 if (curSub && curSub !== lastSub) {
+                   h += `<div class="subsection-group"><div class="subsection-header">📂 ${curSub}</div>`;
+                   inSubGroup = true;
+                 }
+                 lastSub = curSub;
                  let f = ""; let d = it.def || '';
                  if(it.type == 'case') f = `<div class="form-input-container"><label class="switch"><input type="checkbox" data-id="${it.name}" data-def="${d}"><span class="slider"></span></label></div>`;
                  else if (it.type == 'date') f = `<div class="form-input-container"><input type="date" data-id="${it.name}" data-def="${d}" value="${d}"></div>`;
                  else if (it.type == 'nombre') f = `<div class="form-input-container"><input type="number" data-id="${it.name}" data-def="${d}" placeholder="${d}"></div>`;
                  else f = `<div class="form-input-container"><input type="text" data-id="${it.name}" data-def="${d}" placeholder="${d}"></div>`;
                  h += `<div class="form-row"><label>${it.name}</label>${f}</div>`;
+                 // Fermer le groupe si le prochain item a une sous-section différente ou si c'est le dernier
+                 if (inSubGroup && (nextSub !== curSub)) {
+                   h += '</div>';
+                   inSubGroup = false;
+                 }
               });
               b.innerHTML += h + `</div></div>`;
            });
