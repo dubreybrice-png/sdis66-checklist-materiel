@@ -63,13 +63,14 @@ function setup() {
   
   if (!ss.getSheetByName(SHEET_NAMES.INVENTORY)) {
     const s = ss.insertSheet(SHEET_NAMES.INVENTORY);
-    s.appendRow(["Catégorie", "Nom", "Dernier_Controle", "Prochain_Controle", "Statut", "Dernier_Verificateur", "Prochain_Item_Nom", "Prochain_Item_Date", "Mail_Orange", "Mail_Red", "Etat", "Localisation", "Ordre"]);
+    s.appendRow(["Catégorie", "Nom", "Dernier_Controle", "Prochain_Controle", "Statut", "Dernier_Verificateur", "Prochain_Item_Nom", "Prochain_Item_Date", "Mail_Orange", "Mail_Red", "Etat", "Localisation", "Ordre", "SousType"]);
   } else {
     const s = ss.getSheetByName(SHEET_NAMES.INVENTORY);
     const lastCol = Math.max(1, s.getLastColumn());
     const header = s.getRange(1, 1, 1, lastCol).getValues()[0];
     if (header.length < 12 || header[11] !== "Localisation") s.getRange(1, 12).setValue("Localisation");
     if (header.length < 13 || header[12] !== "Ordre") s.getRange(1, 13).setValue("Ordre");
+    if (header.length < 14 || header[13] !== "SousType") s.getRange(1, 14).setValue("SousType");
   }
   
   if (!ss.getSheetByName(SHEET_NAMES.HISTORY)) {
@@ -146,7 +147,8 @@ function getData() {
         mailRed: row[9],
         state: row[10],
         location: row[11] || "",
-        order: row[12] || ""
+        order: row[12] || "",
+        subType: row[13] || ""
       };
       
       inventory.push(item);
@@ -623,7 +625,20 @@ function addBag(cat, name) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const s = ss.getSheetByName(SHEET_NAMES.INVENTORY);
   const nextOrder = getNextOrder_(s, cat);
-  s.appendRow([cat, name, "", "", "green", "", "", "", "", "", "Actif", "", nextOrder]);
+  s.appendRow([cat, name, "", "", "green", "", "", "", "", "", "Actif", "", nextOrder, ""]);
+  invalidateCache_();
+}
+
+function updateBagSubType(name, subType) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const s = ss.getSheetByName(SHEET_NAMES.INVENTORY);
+  const data = s.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][1] == name) {
+      s.getRange(i + 1, 14).setValue(subType || "");
+      break;
+    }
+  }
   invalidateCache_();
 }
 
@@ -846,7 +861,8 @@ function updateCategoryContent(catName, dataJson) {
       groups[row.section].items.push({
         name: row.item,
         type: row.type,
-        def: row.def
+        def: row.def,
+        subsection: row.subsection || ""
       });
     }
   });

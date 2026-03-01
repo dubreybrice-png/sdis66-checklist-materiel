@@ -21,6 +21,7 @@ function loadFormStructures() {
         const type = data[i][2] ? data[i][2].toString().toLowerCase().trim() : "texte";
         const def = data[i][3] ? data[i][3].toString().trim() : "";
         const position = data[i][4] ? data[i][4].toString().trim() : "";
+        const subsection = data[i][5] ? data[i][5].toString().trim() : "";
         
         if (!section || !item) continue;
         
@@ -30,7 +31,7 @@ function loadFormStructures() {
           sections.push(sec);
         }
         
-        sec.items.push({ name: item, type: type, def: def });
+        sec.items.push({ name: item, type: type, def: def, subsection: subsection });
       }
       
       if (sections.length > 0) {
