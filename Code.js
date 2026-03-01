@@ -1341,8 +1341,45 @@ function installGardePSudTrigger() {
       .everyDays(1)
       .atHour(16)
       .create();
+  
+  // Corriger immédiatement les dates existantes
+  const fixResult = fixGardePSudDates();
       
-  return "✅ Trigger Garde PSud activé — vérification quotidienne à 16h.";
+  return "✅ Trigger Garde PSud activé — vérification quotidienne à 16h.\n" + fixResult;
+}
+
+/**
+ * Corrige immédiatement les dates des véhicules Garde PSud
+ * Met Prochain_Controle = demain pour tous les items Garde PSud
+ */
+function fixGardePSudDates() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const inv = ss.getSheetByName(SHEET_NAMES.INVENTORY);
+  const data = inv.getDataRange().getValues();
+  const today = new Date();
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  let fixed = 0;
+  
+  for (let i = 1; i < data.length; i++) {
+    const name = (data[i][1] || "").trim();
+    const location = (data[i][11] || "").trim();
+    const state = (data[i][10] || "").trim();
+    const subType = (data[i][13] || "").trim();
+    
+    const isGP = normalizeCenter_(location) === "garde psud" 
+              || name === "VLI 08"
+              || (subType === "VSSO" && normalizeCenter_(location) === "perpignan sud");
+    
+    if (!isGP || state === "HS") continue;
+    
+    // Mettre prochain contrôle = demain
+    inv.getRange(i + 1, 4).setValue(tomorrow);
+    fixed++;
+  }
+  
+  invalidateCache_();
+  return "✅ " + fixed + " véhicules Garde PSud mis à jour (prochain contrôle = demain).";
 }
 
 // ===================================================================

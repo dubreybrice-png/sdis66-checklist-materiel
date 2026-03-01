@@ -700,7 +700,7 @@
                  }
                  // Ouvrir un nouveau groupe si sous-section non vide et nouveau
                  if (curSub && curSub !== lastSub) {
-                   h += `<div class="subsection-group"><div class="subsection-header">📂 ${curSub}</div>`;
+                   h += `<div class="subsection-group"><div class="subsection-header"><span>📂 ${curSub}</span><label class="sealed-checkbox" style="margin-left:auto;"><input type="checkbox" onchange="toggleSealedSub(this)"> Scellé</label></div>`;
                    inSubGroup = true;
                  }
                  lastSub = curSub;
@@ -765,6 +765,28 @@
           // Réinitialiser les champs
           section.querySelectorAll('input[type="checkbox"]').forEach(input => input.checked = false);
           section.querySelectorAll('input[type="date"], input[type="number"], input[type="text"]').forEach(input => input.value = '');
+        }
+      }
+
+      function toggleSealedSub(checkbox) {
+        const group = checkbox.closest('.subsection-group');
+        if (checkbox.checked) {
+          group.querySelectorAll('input[type="checkbox"][data-def]').forEach(input => {
+            const def = input.getAttribute('data-def');
+            input.checked = (def === 'true' || def === 'Oui' || def === true);
+          });
+          group.querySelectorAll('input[type="date"][data-def]').forEach(input => {
+            input.value = input.getAttribute('data-def') || '';
+          });
+          group.querySelectorAll('input[type="number"][data-def]').forEach(input => {
+            input.value = input.getAttribute('data-def') || '';
+          });
+          group.querySelectorAll('input[type="text"][data-def]').forEach(input => {
+            input.value = input.getAttribute('data-def') || '';
+          });
+        } else {
+          group.querySelectorAll('input[type="checkbox"][data-id]').forEach(input => input.checked = false);
+          group.querySelectorAll('input[type="date"], input[type="number"], input[type="text"]').forEach(input => input.value = '');
         }
       }
 
