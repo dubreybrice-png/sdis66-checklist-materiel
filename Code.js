@@ -1,6 +1,6 @@
 // ******************************************************************************************
 // ****************************** CODE.GS (BACKEND) *****************************************
-// Version 1.9.15 - 18/02/2026 - MAJ backend (QR déplacé vers popup)
+// Version 1.12.0 - Centres virtuels (Astreinte Dept Médicale, Garde PSud) + dropdown fiabilisé
 // ******************************************************************************************
 
 // --- CONFIGURATION ---
@@ -12,6 +12,16 @@ const SHEET_NAMES = {
   HISTORY: "Historique",
   CONFIG: "Config",
   FORMS: "Structure_Forms"
+};
+
+// Spreadsheet externe "Carte Prévisionnelle Opérationnelle" pour la liste des ISP / centres
+const EXTERNAL_SS_ID = "1bwKVm5Bto9u8lPopGxbwA3PfStJeTd159_cO-eKV4FY";
+const EXTERNAL_ISP_SHEET = "ISP";
+
+// Centres virtuels (hors ISP) avec emails fixes
+var VIRTUAL_CENTERS = {
+  "Astreinte Départementale Médicale": "brice.dubrey@sdis66.fr;florian.bois@sdis66.fr",
+  "Garde PSud": "brice.dubrey@sdis66.fr;florian.bois@sdis66.fr"
 };
 
 function doGet(e) {
@@ -102,6 +112,8 @@ function getData() {
     if (!SCRIPT_PROP.getProperty("INIT_V3_CLEANUP")) { cleanupCategories_(ss); SCRIPT_PROP.setProperty("INIT_V3_CLEANUP", "1"); }
     if (!SCRIPT_PROP.getProperty("INIT_V4_REMOVE_DEFAULTS")) { removeAutoDefaultBags_(ss); SCRIPT_PROP.setProperty("INIT_V4_REMOVE_DEFAULTS", "1"); }
     if (!SCRIPT_PROP.getProperty("INIT_V5_ORDER")) { initializeInventoryOrder_(ss); SCRIPT_PROP.setProperty("INIT_V5_ORDER", "1"); }
+    if (!SCRIPT_PROP.getProperty("INIT_V6_VSSO")) { initVSSOContent_(); SCRIPT_PROP.setProperty("INIT_V6_VSSO", "1"); }
+    if (!SCRIPT_PROP.getProperty("INIT_V7_GLOBAL_RED")) { addGlobalRedRecipients_(); SCRIPT_PROP.setProperty("INIT_V7_GLOBAL_RED", "1"); }
     // Charger les formulaires depuis les feuilles Contenu_* (si la fonction existe)
     if (typeof initializeForms === 'function') {
       initializeForms();
@@ -129,17 +141,29 @@ function getData() {
     const invData = invSheet.getDataRange().getValues();
     let inventory = [];
     let dashboard = {};
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
 
     for (let i = 1; i < invData.length; i++) {
       const row = invData[i];
       if (!row[0]) continue;
+      
+      // Recalcul dynamique du statut basé sur la date de prochain contrôle
+      let calculatedStatus = row[4] || "green";
+      if (row[4] !== 'purple' && row[10] !== 'HS' && row[3]) {
+        const nextD = new Date(row[3]);
+        const daysLeft = Math.floor((nextD - today) / (1000 * 60 * 60 * 24));
+        if (daysLeft < 0) calculatedStatus = "red";
+        else if (daysLeft < 30) calculatedStatus = "orange";
+        else calculatedStatus = "green";
+      }
       
       const item = {
         category: row[0],
         name: row[1],
         lastDate: formatDate(row[2]),
         nextDate: formatDate(row[3]),
-        status: row[4],
+        status: calculatedStatus,
         lastVerifier: row[5],
         nextItemName: row[6],
         nextItemDate: formatDate(row[7]),
@@ -194,6 +218,14 @@ function getData() {
       }
     });
 
+    // 6. Centres externes (pour dropdown localisation)
+    let centers = [];
+    try { centers = getExternalAgentsData().centers || []; } catch(e) { Logger.log("Erreur chargement centres: " + e); }
+    // Toujours inclure les centres virtuels, même si le spreadsheet externe échoue
+    const vcNames = Object.keys(VIRTUAL_CENTERS);
+    vcNames.forEach(vc => { if (centers.indexOf(vc) === -1) centers.push(vc); });
+    centers.sort();
+
     return {
       success: true,
       data: {
@@ -205,7 +237,8 @@ function getData() {
         history: history,
         options: options,
         mailConfig: mailConfig,
-        stats: stats
+        stats: stats,
+        centers: centers
       }
     };
     
@@ -901,16 +934,8 @@ function updateBagMails(bag, type, val) {
 }
 
 function updateVliLocation(bag, location) {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const s = ss.getSheetByName(SHEET_NAMES.INVENTORY);
-  const data = s.getDataRange().getValues();
-  for (let i = 1; i < data.length; i++) {
-    if (data[i][1] == bag) {
-      s.getRange(i + 1, 12).setValue(location || "");
-      break;
-    }
-  }
-  invalidateCache_();
+  // Délègue vers la version avec mise à jour mails
+  return updateBagLocationWithMails(bag, location);
 }
 
 function updateVliLocationsBatch(list) {
@@ -919,10 +944,20 @@ function updateVliLocationsBatch(list) {
   const data = s.getDataRange().getValues();
   const map = {};
   (list || []).forEach(it => { if (it && it.name) map[it.name] = it.location || ""; });
+  
+  let extAgents = null;
+  try { extAgents = getExternalAgentsData(); } catch(e) { Logger.log("Erreur lecture agents externes: " + e); }
+  
   for (let i = 1; i < data.length; i++) {
     const name = data[i][1];
+    const category = String(data[i][0]).trim();
     if (map.hasOwnProperty(name)) {
-      s.getRange(i + 1, 12).setValue(map[name]);
+      const loc = map[name];
+      s.getRange(i + 1, 12).setValue(loc);
+      // Auto-maj mails si pas SAC IADE
+      if (category !== "SAC IADE" && extAgents) {
+        applyMailsForLocation_(s, i + 1, loc, extAgents);
+      }
     }
   }
   invalidateCache_();
@@ -1007,12 +1042,14 @@ function checkDailyAlerts() {
     let recipient = "";
     
     if(item.status === 'red' || item.status === 'purple') {
-      if(item.mailRed) {
-        recipient = item.mailRed;
-        subject = conf.redSub || "ALERTE ROUGE";
-        body = conf.redBody || "Matériel périmé.";
-        sendMail = true;
-      }
+      const GLOBAL_RED = "brice.dubrey@sdis66.fr,florian.bois@sdis66.fr";
+      let allRecipients = item.mailRed ? item.mailRed.replace(/;/g, ",").trim() : "";
+      if (allRecipients) allRecipients += "," + GLOBAL_RED;
+      else allRecipients = GLOBAL_RED;
+      recipient = allRecipients;
+      subject = conf.redSub || "ALERTE ROUGE";
+      body = conf.redBody || "Matériel périmé.";
+      sendMail = true;
     }
     else if(item.status === 'orange') {
       if(item.mailOrange) {
@@ -1031,8 +1068,11 @@ function checkDailyAlerts() {
       
       subject = subject.replace(/{nom}/g, item.name);
       
+      // Convertir les ; en , pour MailApp et dédupliquer
+      const cleanRecipient = [...new Set(recipient.replace(/;/g, ",").split(",").map(e => e.trim()).filter(e => e))].join(",");
+      
       try {
-        MailApp.sendEmail(recipient, subject, body);
+        MailApp.sendEmail(cleanRecipient, subject, body);
       } catch(e) {
         console.log("Erreur envoi mail: " + e);
       }
@@ -1044,13 +1084,11 @@ function checkDailyAlerts() {
 // === SYNC MAILS FROM AGENT SPREADSHEET ===
 // ===================================================================
 
-const AGENT_SPREADSHEET_ID = "1bwKVm5Bto9u8lPopGxbwA3PfStJeTd159_cO-eKV4FY";
-
 /**
  * Lit le spreadsheet agents et retourne un objet { centerName: [email1, email2, ...] }
  */
 function getAgentEmailsByCenter_() {
-  const agentSS = SpreadsheetApp.openById(AGENT_SPREADSHEET_ID);
+  const agentSS = SpreadsheetApp.openById(EXTERNAL_SS_ID);
   const sheet = agentSS.getSheets()[0];
   const data = sheet.getDataRange().getValues();
   const map = {};
@@ -1075,7 +1113,7 @@ function getAgentEmailsByCenter_() {
  * Retourne un objet { "NOM_DE_FAMILLE_NORMALISE": email } pour lookup IADE
  */
 function getAgentEmailByLastName_() {
-  const agentSS = SpreadsheetApp.openById(AGENT_SPREADSHEET_ID);
+  const agentSS = SpreadsheetApp.openById(EXTERNAL_SS_ID);
   const sheet = agentSS.getSheets()[0];
   const data = sheet.getDataRange().getValues();
   const map = {};
@@ -1084,7 +1122,6 @@ function getAgentEmailByLastName_() {
     const fullName = (data[i][0] || "").trim();
     const email = (data[i][3] || "").trim();
     if (!fullName || !email) continue;
-    // Le nom est "NOM Prénom" — on prend le premier mot
     const lastName = fullName.split(/\s+/)[0].toUpperCase();
     map[lastName] = email;
   }
@@ -1097,7 +1134,6 @@ function getAgentEmailByLastName_() {
 function normalizeCenter_(name) {
   if (!name) return "";
   let n = name.trim();
-  // Table d'aliases
   const ALIASES = {
     "le boulou": "boulou",
     "pnord": "perpignan nord",
@@ -1115,27 +1151,19 @@ function normalizeCenter_(name) {
   };
   const lower = n.toLowerCase();
   if (ALIASES[lower]) return ALIASES[lower];
-  // Normalisation accent
   return lower.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 }
 
 /**
  * Extrait le nom du centre depuis le nom du sac/VLI
- * - SAC ISP: "Sac ISP Elne 1" → "elne"
- * - SAC RESERVE: "Sac Réserve Millas 1" → "millas"
- * - VLI: utilise le champ location
- * - SAC IADE: utilise le nom de famille pour lookup direct
  */
 function extractCenterFromBag_(name, category, location) {
   if (category === "VLI") {
     return normalizeCenter_(location || "");
   }
   if (category === "SAC ISP" || category === "SAC RESERVE") {
-    // Enlever le préfixe catégorie et le numéro à la fin
     let clean = name;
-    // Supprimer les préfixes courants
     clean = clean.replace(/^sac\s+(isp|reserve|réserve)\s+/i, "");
-    // Supprimer le numéro final (ex: " 1", " 2")
     clean = clean.replace(/\s+\d+$/, "");
     return normalizeCenter_(clean.trim());
   }
@@ -1144,8 +1172,7 @@ function extractCenterFromBag_(name, category, location) {
 
 /**
  * Synchronise les mails orange et rouge de tout l'inventaire
- * depuis le spreadsheet des agents.
- * Appelé manuellement ou par trigger.
+ * depuis le spreadsheet des agents (batch).
  */
 function syncMailsFromAgentSheet() {
   try {
@@ -1165,21 +1192,16 @@ function syncMailsFromAgentSheet() {
       
       let mails = "";
       
-      // === CAS SPÉCIAUX VLI ===
       if (name === "VLI 05") {
         mails = "florian.bois@sdis66.fr; brice.dubrey@sdis66.fr";
       }
       else if (name === "VLI 08") {
-        // Garde PSud — mails gérés par checkGardePSudAlerts()
         mails = "florian.bois@sdis66.fr; brice.dubrey@sdis66.fr";
       }
-      // === SAC IADE — mail personnel ===
       else if (category === "SAC IADE") {
-        // Extraire le nom de famille du nom du sac: "Sac IADE Bedu" → "BEDU"
         const iadeMatch = name.match(/sac\s+iade\s+(.+)/i);
         if (iadeMatch) {
           const lastName = iadeMatch[1].trim().toUpperCase();
-          // Chercher dans les variantes (avec/sans espaces, tirets)
           for (let key in lastNameEmails) {
             if (key === lastName || key.startsWith(lastName) || lastName.startsWith(key)) {
               mails = lastNameEmails[key];
@@ -1188,7 +1210,6 @@ function syncMailsFromAgentSheet() {
           }
         }
       }
-      // === SAC ISP / SAC RESERVE / VLI — par centre ===
       else {
         const center = extractCenterFromBag_(name, category, location);
         if (center && centerEmails[center]) {
@@ -1197,8 +1218,8 @@ function syncMailsFromAgentSheet() {
       }
       
       if (mails) {
-        inv.getRange(i + 1, 9).setValue(mails);   // Mail_Orange
-        inv.getRange(i + 1, 10).setValue(mails);  // Mail_Red
+        inv.getRange(i + 1, 9).setValue(mails);
+        inv.getRange(i + 1, 10).setValue(mails);
         updated++;
       }
     }
@@ -1222,7 +1243,6 @@ function renameIadeBags() {
     "Iade 4": "Sac IADE Petipre",
     "Iade 5": "Sac IADE Py",
     "Iade 6": "Sac IADE Spilemont"
-    // 7 et 8 restent comme ça
   };
   
   const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -1238,7 +1258,6 @@ function renameIadeBags() {
     }
   }
   
-  // Aussi renommer dans l'historique
   const hist = ss.getSheetByName(SHEET_NAMES.HISTORY);
   if (hist && hist.getLastRow() > 1) {
     const histData = hist.getDataRange().getValues();
@@ -1261,7 +1280,6 @@ function renameIadeBags() {
 /**
  * Vérifie les véhicules Garde PSud (ex: VLI 08).
  * Si pas vérifié aujourd'hui à 16h → rouge + mail.
- * À appeler via trigger à 16h.
  */
 function checkGardePSudAlerts() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -1272,14 +1290,12 @@ function checkGardePSudAlerts() {
   
   const GARDE_PSUD_MAILS = "florian.bois@sdis66.fr; brice.dubrey@sdis66.fr";
   
-  // Identifier les véhicules Garde PSud par localisation
   for (let i = 1; i < data.length; i++) {
     const name = (data[i][1] || "").trim();
     const location = (data[i][11] || "").trim();
     const state = (data[i][10] || "").trim();
     const lastDate = data[i][2];
     
-    // Déterminer si c'est un véhicule Garde PSud
     const subType = (data[i][13] || "").trim();
     const isGardePSud = normalizeCenter_(location) === "garde psud" 
                      || name === "VLI 08"
@@ -1287,7 +1303,6 @@ function checkGardePSudAlerts() {
     
     if (!isGardePSud || state === "HS") continue;
     
-    // Vérifier si contrôlé aujourd'hui
     let checkedToday = false;
     if (lastDate) {
       const ld = new Date(lastDate);
@@ -1296,26 +1311,18 @@ function checkGardePSudAlerts() {
     }
     
     if (!checkedToday) {
-      // Passer en rouge
       inv.getRange(i + 1, 5).setValue("red");
-      
-      // Envoyer alerte
       try {
         MailApp.sendEmail(
           GARDE_PSUD_MAILS,
           "🔴 ALERTE GARDE PSUD — " + name + " non vérifié aujourd'hui!",
-          "ATTENTION!\n\n" +
-          "Le véhicule " + name + " (Garde PSud) n'a PAS été vérifié aujourd'hui.\n\n" +
-          "La vérification quotidienne est OBLIGATOIRE pour les véhicules de Garde PSud.\n\n" +
-          "Merci d'agir immédiatement."
+          "ATTENTION!\n\nLe véhicule " + name + " (Garde PSud) n'a PAS été vérifié aujourd'hui.\n\nLa vérification quotidienne est OBLIGATOIRE pour les véhicules de Garde PSud.\n\nMerci d'agir immédiatement."
         );
       } catch(e) {
         console.log("Erreur envoi mail Garde PSud: " + e);
       }
     } else {
-      // Vérifié aujourd'hui → vert
       inv.getRange(i + 1, 5).setValue("green");
-      // Prochain contrôle = demain
       const tomorrow = new Date(today);
       tomorrow.setDate(tomorrow.getDate() + 1);
       inv.getRange(i + 1, 4).setValue(tomorrow);
@@ -1342,15 +1349,12 @@ function installGardePSudTrigger() {
       .atHour(16)
       .create();
   
-  // Corriger immédiatement les dates existantes
   const fixResult = fixGardePSudDates();
-      
   return "✅ Trigger Garde PSud activé — vérification quotidienne à 16h.\n" + fixResult;
 }
 
 /**
  * Corrige immédiatement les dates des véhicules Garde PSud
- * Met Prochain_Controle = demain pour tous les items Garde PSud
  */
 function fixGardePSudDates() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -1373,13 +1377,146 @@ function fixGardePSudDates() {
     
     if (!isGP || state === "HS") continue;
     
-    // Mettre prochain contrôle = demain
     inv.getRange(i + 1, 4).setValue(tomorrow);
     fixed++;
   }
   
   invalidateCache_();
   return "✅ " + fixed + " véhicules Garde PSud mis à jour (prochain contrôle = demain).";
+}
+
+// ===================================================================
+// === EXTERNAL AGENTS / CENTRES (Carte Prévisionnelle) — Dropdown ===
+// ===================================================================
+
+/**
+ * Lit les ISP depuis le spreadsheet externe "Carte Prévisionnelle Opérationnelle"
+ * Colonnes : A=Nom, B=Centre Principal, C=Centre Secondaire, D=Email
+ * Résultat mis en cache 24h dans ScriptProperties
+ */
+function refreshExternalAgents() {
+  try {
+    const ss = SpreadsheetApp.openById(EXTERNAL_SS_ID);
+    const sheet = ss.getSheetByName(EXTERNAL_ISP_SHEET);
+    if (!sheet) { Logger.log("Onglet ISP introuvable dans le spreadsheet externe"); return { centers: [], agents: [] }; }
+
+    const data = sheet.getDataRange().getValues();
+    const agents = [];
+    const centersSet = {};
+
+    for (let i = 1; i < data.length; i++) {
+      const nom = String(data[i][0] || "").trim();
+      const principal = String(data[i][1] || "").trim();
+      const secondaire = String(data[i][2] || "").trim();
+      const email = String(data[i][3] || "").trim();
+      if (!nom) continue;
+      agents.push({ nom: nom, principal: principal, secondaire: secondaire, email: email });
+      if (principal) centersSet[principal] = true;
+      if (secondaire) centersSet[secondaire] = true;
+    }
+
+    // Injecter les centres virtuels
+    Object.keys(VIRTUAL_CENTERS).forEach(vc => { centersSet[vc] = true; });
+    const centers = Object.keys(centersSet).sort();
+    const result = { centers: centers, agents: agents, timestamp: Date.now() };
+    SCRIPT_PROP.setProperty("EXT_AGENTS_CACHE", JSON.stringify(result));
+    Logger.log("Agents externes rafraîchis: " + agents.length + " agents, " + centers.length + " centres");
+    return { centers: centers, agents: agents };
+  } catch (e) {
+    Logger.log("ERREUR refreshExternalAgents: " + e.toString());
+    return { centers: Object.keys(VIRTUAL_CENTERS).sort(), agents: [] };
+  }
+}
+
+/**
+ * Retourne les données agents/centres depuis le cache (ou rafraîchit si >24h)
+ */
+function getExternalAgentsData() {
+  const cached = SCRIPT_PROP.getProperty("EXT_AGENTS_CACHE");
+  if (cached) {
+    try {
+      const parsed = JSON.parse(cached);
+      if (parsed.timestamp && (Date.now() - parsed.timestamp < 86400000)) {
+        return { centers: parsed.centers || [], agents: parsed.agents || [] };
+      }
+    } catch(e) {}
+  }
+  return refreshExternalAgents();
+}
+
+/**
+ * Retourne les emails des ISP affectés (principal OU secondaire) à un centre donné
+ */
+function getEmailsForCenter_(centerName) {
+  if (!centerName) return [];
+  const data = getExternalAgentsData();
+  const emails = [];
+  (data.agents || []).forEach(a => {
+    if ((a.principal === centerName || a.secondaire === centerName) && a.email) {
+      emails.push(a.email);
+    }
+  });
+  return [...new Set(emails)];
+}
+
+/**
+ * Met à jour la localisation d'un sac/VLI et auto-renseigne les mails ISP
+ * Exception : SAC IADE → mails inchangés (sac personnel)
+ */
+function updateBagLocationWithMails(bagName, location) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const s = ss.getSheetByName(SHEET_NAMES.INVENTORY);
+  const data = s.getDataRange().getValues();
+
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][1] == bagName) {
+      const category = String(data[i][0]).trim();
+      s.getRange(i + 1, 12).setValue(location || "");
+
+      if (category !== "SAC IADE") {
+        let extAgents = null;
+        try { extAgents = getExternalAgentsData(); } catch(e) {}
+        applyMailsForLocation_(s, i + 1, location, extAgents);
+      }
+      break;
+    }
+  }
+  invalidateCache_();
+  return { success: true };
+}
+
+/**
+ * Helper : écrit les mails orange/rouge sur une ligne d'inventaire
+ * en se basant sur la localisation (centre) sélectionnée
+ */
+function applyMailsForLocation_(sheet, rowNum, location, extData) {
+  const GLOBAL_RED = "brice.dubrey@sdis66.fr;florian.bois@sdis66.fr";
+  if (!location) {
+    sheet.getRange(rowNum, 9).setValue("");
+    sheet.getRange(rowNum, 10).setValue(GLOBAL_RED);
+    return;
+  }
+  // Centre virtuel (Astreinte Départementale Médicale, Garde PSud, etc.)
+  if (VIRTUAL_CENTERS[location]) {
+    const vcEmails = VIRTUAL_CENTERS[location];
+    sheet.getRange(rowNum, 9).setValue(vcEmails);  // Mail_Orange
+    sheet.getRange(rowNum, 10).setValue(vcEmails); // Mail_Red
+    return;
+  }
+  // Centre ISP classique
+  if (extData) {
+    const emails = [];
+    (extData.agents || []).forEach(a => {
+      if ((a.principal === location || a.secondaire === location) && a.email) emails.push(a.email);
+    });
+    const uniqueEmails = [...new Set(emails)];
+    const emailStr = uniqueEmails.join(";");
+    sheet.getRange(rowNum, 9).setValue(emailStr);
+    sheet.getRange(rowNum, 10).setValue(emailStr ? emailStr + ";" + GLOBAL_RED : GLOBAL_RED);
+  } else {
+    sheet.getRange(rowNum, 9).setValue("");
+    sheet.getRange(rowNum, 10).setValue(GLOBAL_RED);
+  }
 }
 
 // ===================================================================
@@ -1708,4 +1845,138 @@ function getSacReserveContent_() {
       { name: "Kit aérosol enfant (1)", type: "case", def: "true" }
     ]}
   ];
+}
+
+// ===================================================================
+// === VSSO CONTENT ===
+// ===================================================================
+
+function getVSSOContent_() {
+  return [
+    { section: "Capucine", position: "Capucine", items: [
+      { name: "Papiers toilettes", type: "nombre", def: "2", subsection: "" },
+      { name: "Chaises pliables", type: "nombre", def: "2", subsection: "" },
+      { name: "Drapes jetables", type: "nombre", def: "2", subsection: "" },
+      { name: "Rouleau tableau PMA", type: "nombre", def: "1", subsection: "" }
+    ]},
+    { section: "Tiroir 1", position: "Tiroir 1", items: [
+      { name: "Gobelets prédosés en soupe", type: "nombre", def: "12", subsection: "" }
+    ]},
+    { section: "Tiroir 3", position: "Tiroir 3", items: [
+      { name: "Rad-57", type: "nombre", def: "1", subsection: "" },
+      { name: "Piles de rechange", type: "nombre", def: "4", subsection: "" },
+      { name: "Fonctionnement vérifié", type: "case", def: "false", subsection: "" },
+      { name: "Boite masques chirurgicaux", type: "nombre", def: "1", subsection: "" },
+      { name: "Rouleur petits sacs poubelle", type: "nombre", def: "1", subsection: "" },
+      { name: "Rouleur grands sacs poubelle", type: "nombre", def: "1", subsection: "" },
+      { name: "Produit désinfection", type: "nombre", def: "1", subsection: "" },
+      { name: "Paquet lingettes désinfection", type: "nombre", def: "1", subsection: "" },
+      { name: "Rouleur petits sacs jaunes DASRI", type: "nombre", def: "1", subsection: "" }
+    ]},
+    { section: "Tiroir 4", position: "Tiroir 4", items: [
+      { name: "Kit Tire tique", type: "nombre", def: "1", subsection: "" },
+      { name: "Unidoses 10ml NaCl", type: "nombre", def: "35", subsection: "" },
+      { name: "Solution hydroalcoolique", type: "nombre", def: "1", subsection: "" },
+      { name: "Couverture de survie", type: "nombre", def: "5", subsection: "" },
+      { name: "Boite gants d'hygiène", type: "nombre", def: "1", subsection: "" },
+      { name: "Serviettes en papier", type: "nombre", def: "100", subsection: "" }
+    ]},
+    { section: "Tiroir 5", position: "Tiroir 5", items: [
+      { name: "Sticks de sucre", type: "nombre", def: "300", subsection: "" },
+      { name: "Boites allumettes", type: "nombre", def: "10", subsection: "" },
+      { name: "Agitateurs", type: "nombre", def: "250", subsection: "" }
+    ]},
+    { section: "Au sol", position: "Au sol", items: [
+      { name: "Sac de transport type sac de l'avant", type: "nombre", def: "2", subsection: "" },
+      { name: "Frigo branché et thermostat position 2", type: "case", def: "false", subsection: "" },
+      { name: "Bouteilles eau dans frigo", type: "nombre", def: "24", subsection: "" },
+      { name: "Pompe grise XGloo (pour kit dalle Led)", type: "nombre", def: "1", subsection: "" },
+      { name: "Groupe électrogène", type: "nombre", def: "1", subsection: "" },
+      { name: "Rallonge / enrouleur électrique", type: "nombre", def: "1", subsection: "" }
+    ]},
+    { section: "Rangement bas paroie latérale droite", position: "Paroie latérale droite", items: [
+      { name: "Chaises de réhabilitation", type: "nombre", def: "2", subsection: "" },
+      { name: "Sac sousan", type: "nombre", def: "1", subsection: "" },
+      { name: "Lits de camps", type: "nombre", def: "2", subsection: "" },
+      { name: "Poubelle noire pliable ronde", type: "nombre", def: "1", subsection: "" },
+      { name: "Bouteille O2 5l", type: "nombre", def: "1", subsection: "" }
+    ]},
+    { section: "Coffre paroie latérale droite", position: "Paroie latérale droite", items: [
+      { name: "Boite sacs de réhabilitation", type: "nombre", def: "1", subsection: "" }
+    ]},
+    { section: "Paroie latérale haut gauche", position: "Paroie latérale gauche", items: [
+      { name: "Gobelets prédosés en soupe (réserve)", type: "case", def: "true", subsection: "Coffre 1" },
+      { name: "Gobelets prédosés en chocolat", type: "case", def: "true", subsection: "Coffre 1" },
+      { name: "Gobelets jetables", type: "nombre", def: "50", subsection: "Coffre 2" },
+      { name: "Petite bouilloire électrique", type: "nombre", def: "1", subsection: "Coffre 2" },
+      { name: "Gobelets non jetables bleus", type: "nombre", def: "3", subsection: "Coffre 2" },
+      { name: "Gobelets prédosés en café", type: "nombre", def: "75", subsection: "Coffre 2" }
+    ]},
+    { section: "Paroie gauche cellule", position: "Paroie gauche cellule", items: [
+      { name: "Bouteille O2 15l", type: "nombre", def: "1", subsection: "" },
+      { name: "Rampe O2 linde + flexible", type: "nombre", def: "1", subsection: "" },
+      { name: "Masques haute concentration (dans 2 sacs rouges par 10)", type: "nombre", def: "20", subsection: "" },
+      { name: "Chaise de portage", type: "nombre", def: "1", subsection: "" },
+      { name: "Percolateur", type: "nombre", def: "1", subsection: "" }
+    ]},
+    { section: "Porte latérale extérieur côté conducteur", position: "Extérieur côté conducteur", items: [
+      { name: "Kit dalle LED dans 2 sacs noirs", type: "nombre", def: "1", subsection: "" },
+      { name: "Bidons essence pleins", type: "nombre", def: "2", subsection: "" },
+      { name: "Rallonge prise maréchal", type: "nombre", def: "1", subsection: "" },
+      { name: "Cônes de Lübeck pliables", type: "nombre", def: "3", subsection: "" },
+      { name: "Petite poubelle accessible par trappe depuis cellule", type: "nombre", def: "1", subsection: "" },
+      { name: "Extincteur à poudre", type: "nombre", def: "1", subsection: "" },
+      { name: "Triangle de signalisation", type: "nombre", def: "1", subsection: "" }
+    ]},
+    { section: "Brancard", position: "Brancard", items: [
+      { name: "Plan dur", type: "nombre", def: "1", subsection: "" },
+      { name: "Fonctionnement brancard (montée / descente)", type: "case", def: "false", subsection: "" }
+    ]},
+    { section: "Poste de conduite", position: "Poste de conduite", items: [
+      { name: "Antares + chargeur", type: "nombre", def: "1", subsection: "" },
+      { name: "Classeur noir procédure VSSO", type: "nombre", def: "1", subsection: "" },
+      { name: "Chasuble haute visibilité", type: "nombre", def: "2", subsection: "" },
+      { name: "Badge télépéage", type: "nombre", def: "1", subsection: "" },
+      { name: "Constat amiable + photocopie carte grise", type: "nombre", def: "1", subsection: "" }
+    ]},
+    { section: "Caisses extérieures", position: "Caisses extérieures", items: [
+      { name: "Caisses oranges (dans frigo)", type: "nombre", def: "3", subsection: "Dans frigo" },
+      { name: "Pack bouteille 24/pack (dans frigo)", type: "nombre", def: "3", subsection: "Dans frigo" },
+      { name: "Caisses oranges (à côté frigo)", type: "nombre", def: "6", subsection: "À côté frigo" },
+      { name: "Pack bouteille 24/pack (à côté frigo)", type: "nombre", def: "6", subsection: "À côté frigo" },
+      { name: "Caisse isotherme de transport bleue", type: "nombre", def: "1", subsection: "À côté frigo" }
+    ]}
+  ];
+}
+
+function initVSSOContent_() {
+  let forms = {};
+  const saved = SCRIPT_PROP.getProperty("FORMS_JSON");
+  if (saved) { try { forms = JSON.parse(saved); } catch(e) { forms = {}; } }
+  forms["VSSO"] = getVSSOContent_();
+  SCRIPT_PROP.setProperty("FORMS_JSON", JSON.stringify(forms));
+  Logger.log("Contenu VSSO initialisé");
+}
+
+function addGlobalRedRecipients_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const s = ss.getSheetByName(SHEET_NAMES.INVENTORY);
+  const data = s.getDataRange().getValues();
+  const newEmails = ["brice.dubrey@sdis66.fr", "florian.bois@sdis66.fr"];
+  
+  for (let i = 1; i < data.length; i++) {
+    const currentRed = data[i][9] ? data[i][9].toString().trim() : "";
+    const existingEmails = currentRed ? currentRed.split(/[;,]/).map(e => e.trim()).filter(e => e) : [];
+    let changed = false;
+    newEmails.forEach(email => {
+      if (!existingEmails.includes(email)) {
+        existingEmails.push(email);
+        changed = true;
+      }
+    });
+    if (changed) {
+      s.getRange(i + 1, 10).setValue(existingEmails.join(";"));
+    }
+  }
+  Logger.log("Emails globaux rouges ajoutés à tous les items de l'inventaire");
 }

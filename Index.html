@@ -240,7 +240,7 @@
       <div id="tab-inv" class="admin-tab active">
          <div class="admin-card">
            <div style="background:var(--section-bg); padding:10px; border-radius:4px; margin-bottom:15px; font-size:0.9rem; color:#1565c0;">
-             📄 <b>Inventaire :</b> Gérez vos sacs et VLI. Les mails doivent être séparés par des <b>;</b> pour ajouter plusieurs destinataires.
+             📄 <b>Inventaire :</b> Gérez vos sacs et VLI. La <b>localisation</b> détermine automatiquement les ISP à mailer (principal + secondaire). Exception : SAC IADE (mail personnel).
            </div>
            <div style="margin-bottom:15px; display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
              <select id="new-bag-cat"></select>
@@ -255,7 +255,7 @@
              </div>
            </div>
           <table class="inv-table">
-            <thead><tr><th>↕</th><th>N°</th><th>Catégorie</th><th>Nom</th><th>Sous-type</th><th>Mails Orange</th><th>Mails Rouge</th><th>Action</th></tr></thead>
+            <thead><tr><th>↕</th><th>N°</th><th>Catégorie</th><th>Nom</th><th>Localisation</th><th>Sous-type</th><th>Mails Orange</th><th>Mails Rouge</th><th>Action</th></tr></thead>
              <tbody id="inv-body"></tbody>
            </table>
          </div>
@@ -988,13 +988,26 @@
           } else {
             subTypeCell = `<td style="color:#999; text-align:center;">—</td>`;
           }
-          ib.innerHTML += `<tr data-bag="${i.name}" data-cat="${i.category}"><td class="inv-drag">↕</td><td class="order-cell">${i.order || ''}</td><td>${i.category}</td><td><b>${i.name}</b> <button class="admin-btn" style="padding:2px 6px; font-size:0.8rem; margin-left:5px;" onclick="renameBag('${i.name.replace(/'/g, "\\'")}')">✏️</button></td>${subTypeCell}<td><input value="${i.mailOrange||''}" placeholder="mail1@test.com; mail2@test.com" data-bag="${i.name}" data-type="orange" onchange="updateMail(this)" style="width:100%; padding:8px; border:1px solid var(--border-color); border-radius:4px; background:var(--input-bg); color:var(--input-text);"></td><td><input value="${i.mailRed||''}" placeholder="mail1@test.com; mail2@test.com" data-bag="${i.name}" data-type="red" onchange="updateMail(this)" style="width:100%; padding:8px; border:1px solid var(--border-color); border-radius:4px; background:var(--input-bg); color:var(--input-text);"></td><td>${s}</td></tr>`;
+          // Location dropdown
+          let locationCell = '<td>';
+          if (i.category !== 'SAC IADE') {
+            locationCell += `<select data-bag="${i.name}" onchange="updateBagLocationAdmin(this)" style="padding:6px; border:1px solid var(--border-color); border-radius:4px; background:var(--input-bg); color:var(--input-text); max-width:160px; font-size:0.85rem;">`;
+            locationCell += `<option value="">— Aucun —</option>`;
+            (D.centers || []).forEach(c => { locationCell += `<option value="${c}" ${i.location === c ? 'selected' : ''}>${c}</option>`; });
+            locationCell += '</select>';
+          } else {
+            locationCell += `<span style="color:#999; font-size:0.8rem;">Personnel</span>`;
+          }
+          locationCell += '</td>';
+          ib.innerHTML += `<tr data-bag="${i.name}" data-cat="${i.category}"><td class="inv-drag">↕</td><td class="order-cell">${i.order || ''}</td><td>${i.category}</td><td><b>${i.name}</b> <button class="admin-btn" style="padding:2px 6px; font-size:0.8rem; margin-left:5px;" onclick="renameBag('${i.name.replace(/'/g, "\\'")}')">✏️</button></td>${locationCell}${subTypeCell}<td><input value="${i.mailOrange||''}" placeholder="Auto via localisation" data-bag="${i.name}" data-type="orange" onchange="updateMail(this)" style="width:100%; padding:8px; border:1px solid var(--border-color); border-radius:4px; background:var(--input-bg); color:var(--input-text); font-size:0.8rem;"></td><td><input value="${i.mailRed||''}" placeholder="Auto via localisation" data-bag="${i.name}" data-type="red" onchange="updateMail(this)" style="width:100%; padding:8px; border:1px solid var(--border-color); border-radius:4px; background:var(--input-bg); color:var(--input-text); font-size:0.8rem;"></td><td>${s}</td></tr>`;
         });
         const vliBody = document.getElementById('vli-loc-body');
         if (vliBody) {
           vliBody.innerHTML = "";
           D.inventory.filter(i => i.category === 'VLI').forEach(i => {
-            vliBody.innerHTML += `<tr><td><b>${i.name}</b></td><td><input value="${i.location || ''}" data-bag="${i.name}" placeholder="Ex: CIS Perpignan" style="width:100%; padding:8px; border:1px solid var(--border-color); border-radius:4px; background:var(--input-bg); color:var(--input-text);"></td></tr>`;
+            let locOpts = '<option value="">— Aucun —</option>';
+            (D.centers || []).forEach(c => { locOpts += `<option value="${c}" ${i.location === c ? 'selected' : ''}>${c}</option>`; });
+            vliBody.innerHTML += `<tr><td><b>${i.name}</b></td><td><select data-bag="${i.name}" style="width:100%; padding:8px; border:1px solid var(--border-color); border-radius:4px; background:var(--input-bg); color:var(--input-text);">${locOpts}</select></td></tr>`;
           });
         }
         const cl = document.getElementById('cat-conf'); cl.innerHTML="";
@@ -1630,9 +1643,19 @@
         }).renameIadeBags();
       }
       function updateMail(i) { google.script.run.updateBagMails(i.dataset.bag, i.dataset.type, i.value); }
+      function updateBagLocationAdmin(el) {
+        const bag = el.getAttribute('data-bag');
+        const loc = el.value;
+        el.disabled = true;
+        google.script.run.withSuccessHandler(() => { el.disabled = false; loadData(); }).withFailureHandler(err => { el.disabled = false; alert('Erreur: ' + err.message); }).updateBagLocationWithMails(bag, loc);
+      }
+      function refreshAgentsList() {
+        if (!confirm('Rafra\u00eechir la liste des ISP/centres depuis le spreadsheet externe ?')) return;
+        google.script.run.withSuccessHandler(res => { alert('Liste ISP rafra\u00eechie !\n' + (res.centers||[]).length + ' centres, ' + (res.agents||[]).length + ' agents'); loadData(); }).withFailureHandler(err => alert('Erreur: ' + err.message)).refreshExternalAgents();
+      }
       function saveAllVliLocations() {
         const list = [];
-        document.querySelectorAll('#vli-loc-body input[data-bag]').forEach(i => {
+        document.querySelectorAll('#vli-loc-body select[data-bag]').forEach(i => {
           list.push({ name: i.dataset.bag, location: i.value });
         });
         google.script.run.withSuccessHandler(loadData).updateVliLocationsBatch(list);
