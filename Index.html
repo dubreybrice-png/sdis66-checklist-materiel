@@ -454,8 +454,16 @@
               <div style="display:flex; gap:8px; margin-top:5px; flex-wrap:wrap;"><input id="next-item" placeholder="Nom" style="flex:1; min-width:120px; padding:6px; border:1px solid #ccc;"><input type="date" id="next-date" style="padding:6px; border:1px solid #ccc;"></div>
            </div>
            <div id="verif-field" style="margin-bottom:10px; display:none;">
-              <b style="font-size:0.9rem;">👤 Vérificateur :</b> 
-              <input id="verif-name" style="width:100%; margin-top:5px; padding:8px; border:1px solid #ccc; border-radius:4px; box-sizing:border-box;">
+              <div style="display:flex; gap:10px; align-items:flex-start; flex-wrap:wrap;">
+                <div style="flex:1; min-width:200px;">
+                  <b style="font-size:0.9rem;">👤 Vérificateur :</b>
+                  <input id="verif-name" style="width:100%; margin-top:5px; padding:8px; border:1px solid #ccc; border-radius:4px; box-sizing:border-box;">
+                </div>
+                <div style="flex:1; min-width:220px;">
+                  <b style="font-size:0.9rem;">📝 Observations :</b>
+                  <input id="verif-observations" placeholder="Commentaire" style="width:100%; margin-top:5px; padding:8px; border:1px solid #ccc; border-radius:4px; box-sizing:border-box;">
+                </div>
+              </div>
            </div>
            <button class="admin-btn success" style="width:100%; padding:10px; font-size:0.95rem;" onclick="submitCheck()">Valider le contrôle</button>
         </div>
@@ -665,6 +673,7 @@
         if (qrBtn) qrBtn.style.display = D.options.enableQR ? 'inline-flex' : 'none';
         document.getElementById('next-item').value = item.nextItemName || "";
         document.getElementById('verif-name').value = "";
+        document.getElementById('verif-observations').value = "";
         document.getElementById('extra-fields').style.display = D.options.enableExpiry ? 'block' : 'none';
         document.getElementById('verif-field').style.display = D.options.enableVerifier ? 'block' : 'none';
         const b = document.getElementById('m-body'); b.innerHTML = "";
@@ -925,6 +934,7 @@
 
       function submitCheck() {
          const verif = document.getElementById('verif-name').value;
+        const observations = (document.getElementById('verif-observations').value || '').trim();
          const nItem = document.getElementById('next-item').value; const nDate = document.getElementById('next-date').value;
          if(D.options.enableVerifier && !verif) return alert("Vérificateur obligatoire.");
          let data = {};
@@ -946,7 +956,7 @@
            if(km) google.script.run.saveVliMileage(CURR.name, km, kmDate);
          }
          document.getElementById('chkModal').style.display = 'none'; document.getElementById('global-loader').style.display = 'flex';
-         google.script.run.withSuccessHandler(loadData).saveCheck(CURR.name, data, nItem, nDate, verif, verificationTime);
+         google.script.run.withSuccessHandler(loadData).saveCheck(CURR.name, data, nItem, nDate, verif, verificationTime, observations);
       }
 
       function renderAdmin() {
@@ -1540,10 +1550,18 @@
           timeDisplay = `<div style="background:#fff3cd; padding:10px; border-radius:4px; margin-bottom:15px; border-left:4px solid #ffc107;"><b>⏱️ Temps de vérification:</b> <span style="font-size:1.1em; color:#ff9800;">${timeMatch[1]} min ${timeMatch[2]} s</span></div>`;
           detailsClean = detailsClean.replace(timeMatch[0], ''); // Supprimer le temps pour le parsing
         }
+        const detailParts = detailsClean.split(" || ").filter(Boolean);
+        const primary = detailParts.length ? detailParts[0] : "";
+        const extras = detailParts.length > 1 ? detailParts.slice(1) : [];
         let html = `<h3>${h.name}</h3><p>Vérifié par ${h.verifier} le ${h.dateStr}</p>${timeDisplay}<hr>`;
-        if(detailsClean.startsWith("{")){
-          try{ let j = JSON.parse(detailsClean.split(" || ")[0]); for(let k in j) html += `<b>${k}:</b> ${j[k]}<br>`; }catch(e){}
-        } else { html += detailsClean; }
+        if(primary.startsWith("{")){
+          try{ let j = JSON.parse(primary); for(let k in j) html += `<b>${k}:</b> ${j[k]}<br>`; }catch(e){ html += primary; }
+        } else { html += primary; }
+        if(extras.length) {
+          html += `<div style="margin-top:12px; padding:10px; background:var(--section-bg); border-left:4px solid #1565c0; border-radius:4px;">`;
+          extras.forEach(x => { html += `<div style="margin:4px 0;">${x}</div>`; });
+          html += `</div>`;
+        }
         document.getElementById('hist-detail').innerHTML = html;
         document.getElementById('histModal').style.display = 'flex';
       }
@@ -1728,13 +1746,19 @@
         
         hist.forEach(h => {
           html += `<div class="entry"><div class="date">📅 ${h.dateStr}</div><div class="verifier">👤 ${h.verifier || 'N/A'}</div>`;
-          if(h.details.startsWith("{")) {
-            try{ let j = JSON.parse(h.details.split(" || ")[0]); 
+          const detailParts = (h.details || '').split(" || ").filter(Boolean);
+          const primary = detailParts.length ? detailParts[0] : '';
+          const extras = detailParts.length > 1 ? detailParts.slice(1) : [];
+          if(primary.startsWith("{")) {
+            try{ let j = JSON.parse(primary); 
               html += `<table>`;
               for(let k in j) html += `<tr><td>${k}</td><td>${j[k]}</td></tr>`;
               html += `</table>`;
-            }catch(e){}
-          } else { html += `<p>${h.details}</p>`; }
+            }catch(e){ html += `<p>${primary}</p>`; }
+          } else { html += `<p>${primary}</p>`; }
+          if(extras.length) {
+            html += `<div style="margin-top:10px; padding:8px; background:#f5f5f5; border-left:3px solid #1565c0;">${extras.map(x => `<div>${x}</div>`).join('')}</div>`;
+          }
           html += `</div>`;
         });
         
