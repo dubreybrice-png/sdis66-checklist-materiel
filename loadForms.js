@@ -43,6 +43,12 @@ function loadFormStructures() {
   
   // Sauvegarder
   const prop = PropertiesService.getScriptProperties();
+  
+  // Toujours injecter le contenu VSSO (défini dans Code.js)
+  if (typeof getVSSOContent_ === 'function') {
+    formsData["VSSO"] = getVSSOContent_();
+  }
+  
   prop.setProperty("FORMS_JSON", JSON.stringify(formsData));
   
   Logger.log("Formulaires chargés: " + JSON.stringify(formsData, null, 2));

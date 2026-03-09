@@ -1,6 +1,6 @@
 // ******************************************************************************************
 // ****************************** CODE.GS (BACKEND) *****************************************
-// Version 1.12.0 - Centres virtuels (Astreinte Dept Médicale, Garde PSud) + dropdown fiabilisé
+// Version 1.13.0 - VSSO catégorie séparée, dropdowns fiabilisés, red mails enforced
 // ******************************************************************************************
 
 // --- CONFIGURATION ---
@@ -114,6 +114,7 @@ function getData() {
     if (!SCRIPT_PROP.getProperty("INIT_V5_ORDER")) { initializeInventoryOrder_(ss); SCRIPT_PROP.setProperty("INIT_V5_ORDER", "1"); }
     if (!SCRIPT_PROP.getProperty("INIT_V6_VSSO")) { initVSSOContent_(); SCRIPT_PROP.setProperty("INIT_V6_VSSO", "1"); }
     if (!SCRIPT_PROP.getProperty("INIT_V7_GLOBAL_RED")) { addGlobalRedRecipients_(); SCRIPT_PROP.setProperty("INIT_V7_GLOBAL_RED", "1"); }
+    if (!SCRIPT_PROP.getProperty("INIT_V8_VSSO_CAT")) { migrateVssoCategory_(ss); SCRIPT_PROP.setProperty("INIT_V8_VSSO_CAT", "1"); }
     // Charger les formulaires depuis les feuilles Contenu_* (si la fonction existe)
     if (typeof initializeForms === 'function') {
       initializeForms();
@@ -185,6 +186,8 @@ function getData() {
     let forms = {};
     const savedForms = SCRIPT_PROP.getProperty("FORMS_JSON");
     if (savedForms) forms = JSON.parse(savedForms);
+    // Toujours injecter le contenu VSSO (loadFormStructures peut l'écraser)
+    forms["VSSO"] = getVSSOContent_();
     
     // 4. Historique
     const histSheet = ss.getSheetByName(SHEET_NAMES.HISTORY);
@@ -303,10 +306,9 @@ function saveCheck(bagName, formData, nextItemName, nextItemDate, verifierName, 
   
   // Garde PSud: fréquence forcée à 1 jour
   const bagLocation = (data[bagRowIndex - 1][11] || "").trim();
-  const bagSubType = (data[bagRowIndex - 1][13] || "").trim();
   const isGardePSud_ = bagName === "VLI 08" 
     || normalizeCenter_(bagLocation) === "garde psud"
-    || (bagSubType === "VSSO" && normalizeCenter_(bagLocation) === "perpignan sud");
+    || (category === "VSSO" && normalizeCenter_(bagLocation) === "perpignan sud");
   if (isGardePSud_) currentFreq = 1;
   
   const now = new Date();
@@ -1296,10 +1298,10 @@ function checkGardePSudAlerts() {
     const state = (data[i][10] || "").trim();
     const lastDate = data[i][2];
     
-    const subType = (data[i][13] || "").trim();
+    const bagCategory = (data[i][0] || "").trim();
     const isGardePSud = normalizeCenter_(location) === "garde psud" 
                      || name === "VLI 08"
-                     || (subType === "VSSO" && normalizeCenter_(location) === "perpignan sud");
+                     || (bagCategory === "VSSO" && normalizeCenter_(location) === "perpignan sud");
     
     if (!isGardePSud || state === "HS") continue;
     
@@ -1369,11 +1371,11 @@ function fixGardePSudDates() {
     const name = (data[i][1] || "").trim();
     const location = (data[i][11] || "").trim();
     const state = (data[i][10] || "").trim();
-    const subType = (data[i][13] || "").trim();
+    const bagCategory = (data[i][0] || "").trim();
     
     const isGP = normalizeCenter_(location) === "garde psud" 
               || name === "VLI 08"
-              || (subType === "VSSO" && normalizeCenter_(location) === "perpignan sud");
+              || (bagCategory === "VSSO" && normalizeCenter_(location) === "perpignan sud");
     
     if (!isGP || state === "HS") continue;
     
@@ -1979,4 +1981,34 @@ function addGlobalRedRecipients_() {
     }
   }
   Logger.log("Emails globaux rouges ajoutés à tous les items de l'inventaire");
+}
+
+/**
+ * Migration V8 : Convertit les VLI ayant subType=VSSO en catégorie VSSO
+ * et ajoute VSSO dans la feuille Config si absente.
+ */
+function migrateVssoCategory_(ss) {
+  // 1. Ajouter VSSO dans Config si pas déjà présente
+  const confSheet = ss.getSheetByName(SHEET_NAMES.CONFIG);
+  const confData = confSheet.getDataRange().getValues();
+  let hasVSSO = false;
+  for (let i = 1; i < confData.length; i++) {
+    if (confData[i][0] === "VSSO") { hasVSSO = true; break; }
+  }
+  if (!hasVSSO) confSheet.appendRow(["VSSO", 1]);
+
+  // 2. Convertir les VLI ayant subType=VSSO en catégorie VSSO
+  const invSheet = ss.getSheetByName(SHEET_NAMES.INVENTORY);
+  const invData = invSheet.getDataRange().getValues();
+  let migrated = 0;
+  for (let i = 1; i < invData.length; i++) {
+    const cat = (invData[i][0] || "").trim();
+    const sub = (invData[i][13] || "").trim();
+    if (cat === "VLI" && sub === "VSSO") {
+      invSheet.getRange(i + 1, 1).setValue("VSSO");   // Catégorie = VSSO
+      invSheet.getRange(i + 1, 14).setValue("");       // Effacer subType
+      migrated++;
+    }
+  }
+  Logger.log("Migration VSSO: " + migrated + " items convertis de VLI+VSSO vers catégorie VSSO");
 }

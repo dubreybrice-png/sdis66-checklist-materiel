@@ -240,7 +240,7 @@
       <div id="tab-inv" class="admin-tab active">
          <div class="admin-card">
            <div style="background:var(--section-bg); padding:10px; border-radius:4px; margin-bottom:15px; font-size:0.9rem; color:#1565c0;">
-             📄 <b>Inventaire :</b> Gérez vos sacs et VLI. La <b>localisation</b> détermine automatiquement les ISP à mailer (principal + secondaire). Exception : SAC IADE (mail personnel).
+             📄 <b>Inventaire :</b> Gérez vos sacs et véhicules. La <b>localisation</b> détermine automatiquement les ISP à mailer. SAC IADE : saisie manuelle. <b>Mails rouges</b> : brice+florian toujours inclus.
            </div>
            <div style="margin-bottom:15px; display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
              <select id="new-bag-cat"></select>
@@ -255,7 +255,7 @@
              </div>
            </div>
           <table class="inv-table">
-            <thead><tr><th>↕</th><th>N°</th><th>Catégorie</th><th>Nom</th><th>Localisation</th><th>Sous-type</th><th>Mails Orange</th><th>Mails Rouge</th><th>Action</th></tr></thead>
+            <thead><tr><th>↕</th><th>N°</th><th>Catégorie</th><th>Nom</th><th>Localisation</th><th>Mails Orange</th><th>Mails Rouge</th><th>Action</th></tr></thead>
              <tbody id="inv-body"></tbody>
            </table>
          </div>
@@ -264,13 +264,14 @@
       <div id="tab-vli-loc" class="admin-tab">
          <div class="admin-card">
            <div style="background:var(--section-bg); padding:10px; border-radius:4px; margin-bottom:15px; font-size:0.9rem; color:var(--text-color); border-left:4px solid #42a5f5;">
-             📍 <b>Localisation VLI :</b> Renseignez l'emplacement de chaque VLI (affiché sur les tuiles).
+             📍 <b>Localisation Véhicules :</b> Renseignez l'emplacement de chaque VLI/VSSO (affiché sur les tuiles).
            </div>
            <div style="text-align:right; margin-bottom:10px;">
+             <button class="admin-btn" onclick="refreshAgentsList()" style="margin-right:8px;">🔄 Rafraîchir ISP</button>
              <button class="admin-btn success" onclick="saveAllVliLocations()">💾 Enregistrer</button>
            </div>
            <table class="inv-table">
-             <thead><tr><th>VLI</th><th>Localisation</th></tr></thead>
+             <thead><tr><th>Véhicule</th><th>Localisation</th></tr></thead>
              <tbody id="vli-loc-body"></tbody>
            </table>
          </div>
@@ -614,7 +615,7 @@
               const div = document.createElement('div'); div.className = `card status-${item.status}`;
               
               // Nom en gras et plus gros avec meilleure typographie
-              let cardContent = `<div class="card-title" style="font-size:1.25em; font-weight:600; margin-bottom:12px; letter-spacing:0.3px;">${item.name}${(cat === 'VLI' && item.location) ? ` <span class="loc">(${item.location})</span>` : ''}</div>`;
+              let cardContent = `<div class="card-title" style="font-size:1.25em; font-weight:600; margin-bottom:12px; letter-spacing:0.3px;">${item.name}${((cat === 'VLI' || cat === 'VSSO') && item.location) ? ` <span class="loc">(${item.location})</span>` : ''}</div>`;
               
               // Dernier contrôle et prochain contrôle avec meilleure séparation
               cardContent += `<div class="card-info" style="font-size:0.9em; opacity:0.95; line-height:1.6;">`;
@@ -632,15 +633,15 @@
                 cardContent += `<div class="card-extra" style="border-top:${D.options.enableExpiry && item.nextItemName ? 'none' : '1px solid rgba(255,255,255,0.2)'}; opacity:0.85; font-size:0.85em; margin-top:${D.options.enableExpiry && item.nextItemName ? '4px' : '8px'}; padding-top:${D.options.enableExpiry && item.nextItemName ? '0' : '8px'};">👤 ${item.lastVerifier}</div>`;
               }
               
-              // VLI: afficher kilométrage
-              if(cat === 'VLI' && D.vliMileages) {
+              // VLI/VSSO: afficher kilométrage
+              if((cat === 'VLI' || cat === 'VSSO') && D.vliMileages) {
                 const mKey = (item.name||"").replace(/[^a-zA-Z0-9]/g,"_");
                 const mData = D.vliMileages[mKey];
                 if(mData) cardContent += `<div style="font-size:0.85em; margin-top:6px; padding-top:6px; border-top:1px solid rgba(255,255,255,0.2); opacity:0.9;">🚗 ${mData.km} km — ${mData.date}</div>`;
               }
               
-              // VLI: bouton impact inline
-              if(cat === 'VLI') {
+              // VLI/VSSO: bouton impact inline
+              if(cat === 'VLI' || cat === 'VSSO') {
                 cardContent += `<div style="margin-top:6px;"><span class="vli-impact-btn" onclick="event.stopPropagation(); openVliImpact('${item.name.replace(/'/g,"\\'")}')">🔍 Impact</span></div>`;
               }
               
@@ -653,16 +654,7 @@
         const sel = document.getElementById('new-bag-cat'); const sel2 = document.getElementById('cat-selector');
         sel.innerHTML = ""; sel2.innerHTML = "";
         D.categoriesOrder.forEach(c => { sel.innerHTML += `<option>${c}</option>`; sel2.innerHTML += `<option>${c}</option>`; });
-        if (!D.categoriesOrder.includes('VSSO')) sel2.innerHTML += `<option>VSSO</option>`;
         renderAdmin(); renderStats(); renderEditor();
-      }
-
-      function updateSubType(el) {
-        const bag = el.getAttribute('data-bag');
-        const val = el.value;
-        const inv = D.inventory.find(x => x.name === bag);
-        if (inv) inv.subType = val;
-        google.script.run.updateBagSubType(bag, val);
       }
 
       function openCheck(item) {
@@ -676,7 +668,7 @@
         document.getElementById('extra-fields').style.display = D.options.enableExpiry ? 'block' : 'none';
         document.getElementById('verif-field').style.display = D.options.enableVerifier ? 'block' : 'none';
         const b = document.getElementById('m-body'); b.innerHTML = "";
-        const formKey = (item.category === 'VLI' && item.subType === 'VSSO' && D.forms['VSSO']) ? 'VSSO' : item.category;
+        const formKey = item.category;
         if(D.forms && D.forms[formKey]) {
            D.forms[formKey].forEach((sec, secIdx) => {
               let p = sec.position ? `<span class="zone-pos">${sec.position}</span>` : "";
@@ -719,8 +711,8 @@
               b.innerHTML += h + `</div></div>`;
            });
         }
-        // VLI: champs kilométrage en haut du formulaire
-        if(item.category === 'VLI') {
+        // VLI/VSSO: champs kilométrage en haut du formulaire
+        if(item.category === 'VLI' || item.category === 'VSSO') {
           const mKey = (item.name||"").replace(/[^a-zA-Z0-9]/g,"_");
           const mData = D.vliMileages ? D.vliMileages[mKey] : null;
           const today = new Date().toISOString().split('T')[0];
@@ -948,7 +940,7 @@
            verificationTime = `${minutes}min${seconds}s`;
          }
          // VLI: sauvegarder kilométrage
-         if(CURR.category === 'VLI') {
+         if(CURR.category === 'VLI' || CURR.category === 'VSSO') {
            const km = document.getElementById('vliKmInput') ? document.getElementById('vliKmInput').value : '';
            const kmDate = document.getElementById('vliDateInput') ? document.getElementById('vliDateInput').value : '';
            if(km) google.script.run.saveVliMileage(CURR.name, km, kmDate);
@@ -982,12 +974,6 @@
         });
         invList.forEach(i => {
           let s = i.state === 'HS' ? `<button class="admin-btn success" onclick="setBagStatus('${i.name.replace(/'/g, "\\'")}',' Actif')">Activer</button> <button class="admin-btn danger" onclick="if(confirm('Supprimer ${i.name} ?')) delBag('${i.name.replace(/'/g, "\\'")}')">🗑️</button>` : `<button class="admin-btn secondary" onclick="setBagStatus('${i.name.replace(/'/g, "\\'")}',' HS')">HS</button> <button class="admin-btn danger" onclick="if(confirm('Supprimer ${i.name} ?')) delBag('${i.name.replace(/'/g, "\\'")}')">🗑️</button>`;
-          let subTypeCell = '';
-          if (i.category === 'VLI') {
-            subTypeCell = `<td><select data-bag="${i.name}" onchange="updateSubType(this)" style="padding:6px; border:1px solid var(--border-color); border-radius:4px; background:var(--input-bg); color:var(--input-text);"><option value="" ${!i.subType?'selected':''}>—</option><option value="VSSO" ${i.subType==='VSSO'?'selected':''}>VSSO</option></select></td>`;
-          } else {
-            subTypeCell = `<td style="color:#999; text-align:center;">—</td>`;
-          }
           // Location dropdown
           let locationCell = '<td>';
           if (i.category !== 'SAC IADE') {
@@ -999,15 +985,21 @@
             locationCell += `<span style="color:#999; font-size:0.8rem;">Personnel</span>`;
           }
           locationCell += '</td>';
-          ib.innerHTML += `<tr data-bag="${i.name}" data-cat="${i.category}"><td class="inv-drag">↕</td><td class="order-cell">${i.order || ''}</td><td>${i.category}</td><td><b>${i.name}</b> <button class="admin-btn" style="padding:2px 6px; font-size:0.8rem; margin-left:5px;" onclick="renameBag('${i.name.replace(/'/g, "\\'")}')">✏️</button></td>${locationCell}${subTypeCell}<td><input value="${i.mailOrange||''}" placeholder="Auto via localisation" data-bag="${i.name}" data-type="orange" onchange="updateMail(this)" style="width:100%; padding:8px; border:1px solid var(--border-color); border-radius:4px; background:var(--input-bg); color:var(--input-text); font-size:0.8rem;"></td><td><input value="${i.mailRed||''}" placeholder="Auto via localisation" data-bag="${i.name}" data-type="red" onchange="updateMail(this)" style="width:100%; padding:8px; border:1px solid var(--border-color); border-radius:4px; background:var(--input-bg); color:var(--input-text); font-size:0.8rem;"></td><td>${s}</td></tr>`;
+          // Mails : SAC IADE = saisie manuelle. Autres = auto via localisation.
+          let orangePlaceholder = (i.category === 'SAC IADE') ? "Saisir email manuellement" : "Auto via localisation";
+          // Red : toujours brice+florian. Afficher les mails existants.
+          let redValue = i.mailRed || '';
+          const GLOBAL_RED = 'brice.dubrey@sdis66.fr;florian.bois@sdis66.fr';
+          if (!redValue.includes('brice.dubrey@sdis66.fr')) redValue = redValue ? redValue + ';' + GLOBAL_RED : GLOBAL_RED;
+          ib.innerHTML += `<tr data-bag="${i.name}" data-cat="${i.category}"><td class="inv-drag">↕</td><td class="order-cell">${i.order || ''}</td><td>${i.category}</td><td><b>${i.name}</b> <button class="admin-btn" style="padding:2px 6px; font-size:0.8rem; margin-left:5px;" onclick="renameBag('${i.name.replace(/'/g, "\\'")}')">✏️</button></td>${locationCell}<td><input value="${i.mailOrange||''}" placeholder="${orangePlaceholder}" data-bag="${i.name}" data-type="orange" onchange="updateMail(this)" style="width:100%; padding:8px; border:1px solid var(--border-color); border-radius:4px; background:var(--input-bg); color:var(--input-text); font-size:0.8rem;"></td><td><input value="${redValue}" placeholder="${GLOBAL_RED}" data-bag="${i.name}" data-type="red" onchange="updateMail(this)" style="width:100%; padding:8px; border:1px solid var(--border-color); border-radius:4px; background:var(--input-bg); color:var(--input-text); font-size:0.8rem;"></td><td>${s}</td></tr>`;
         });
         const vliBody = document.getElementById('vli-loc-body');
         if (vliBody) {
           vliBody.innerHTML = "";
-          D.inventory.filter(i => i.category === 'VLI').forEach(i => {
+          D.inventory.filter(i => i.category === 'VLI' || i.category === 'VSSO').forEach(i => {
             let locOpts = '<option value="">— Aucun —</option>';
             (D.centers || []).forEach(c => { locOpts += `<option value="${c}" ${i.location === c ? 'selected' : ''}>${c}</option>`; });
-            vliBody.innerHTML += `<tr><td><b>${i.name}</b></td><td><select data-bag="${i.name}" style="width:100%; padding:8px; border:1px solid var(--border-color); border-radius:4px; background:var(--input-bg); color:var(--input-text);">${locOpts}</select></td></tr>`;
+            vliBody.innerHTML += `<tr><td><b>${i.name}</b> <span style="font-size:0.8em; color:#999;">(${i.category})</span></td><td><select data-bag="${i.name}" style="width:100%; padding:8px; border:1px solid var(--border-color); border-radius:4px; background:var(--input-bg); color:var(--input-text);">${locOpts}</select></td></tr>`;
           });
         }
         const cl = document.getElementById('cat-conf'); cl.innerHTML="";
