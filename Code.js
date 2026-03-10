@@ -1,12 +1,12 @@
 // ******************************************************************************************
 // ****************************** CODE.GS (BACKEND) *****************************************
-// Version 1.13.0 - VSSO catégorie séparée, dropdowns fiabilisés, red mails enforced
+// Version 1.13.1 - déploiement v269: VSSO catégorie séparée, corrections VLI et cache
 // ******************************************************************************************
 
 // --- CONFIGURATION ---
 const SCRIPT_PROP = PropertiesService.getScriptProperties();
 // Version code utilisée pour invalider le snapshot cache lors d'un déploiement
-const CODE_VERSION = 'v268';
+const CODE_VERSION = 'v269';
 const BOOTSTRAP_SNAPSHOT_KEY = "BOOTSTRAP_SNAPSHOT_V1";
 const PHOTO_PRESENCE_KEY = "PHOTO_PRESENCE_JSON";
 const SHEET_NAMES = {
