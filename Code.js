@@ -5,6 +5,8 @@
 
 // --- CONFIGURATION ---
 const SCRIPT_PROP = PropertiesService.getScriptProperties();
+// Version code utilisée pour invalider le snapshot cache lors d'un déploiement
+const CODE_VERSION = 'v268';
 const BOOTSTRAP_SNAPSHOT_KEY = "BOOTSTRAP_SNAPSHOT_V1";
 const PHOTO_PRESENCE_KEY = "PHOTO_PRESENCE_JSON";
 const SHEET_NAMES = {
@@ -40,6 +42,17 @@ function getAppUrl() {
 // --- BOOTSTRAP (data + photos + mileages) with short cache ---
 function getBootstrapData() {
   const cache = CacheService.getScriptCache();
+  // If code version changed since last snapshot, force rebuild to avoid serving stale forms/status
+  try {
+    const propVersion = SCRIPT_PROP.getProperty('CODE_VERSION') || '';
+    if (propVersion !== CODE_VERSION) {
+      cache.remove("BOOTSTRAP_V1");
+      try { SCRIPT_PROP.deleteProperty(BOOTSTRAP_SNAPSHOT_KEY); } catch(e) {}
+      SCRIPT_PROP.setProperty('CODE_VERSION', CODE_VERSION);
+      Logger.log('CODE_VERSION mismatch — forcing bootstrap snapshot rebuild.');
+    }
+  } catch(e) { Logger.log('Error checking CODE_VERSION: ' + e); }
+
   const cached = cache.get("BOOTSTRAP_V1");
   if (cached) return JSON.parse(cached);
 

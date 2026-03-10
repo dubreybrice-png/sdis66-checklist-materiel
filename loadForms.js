@@ -48,6 +48,10 @@ function loadFormStructures() {
   if (typeof getVSSOContent_ === 'function') {
     formsData["VSSO"] = getVSSOContent_();
   }
+  // Injecter le contenu VLI par défaut si disponible (évite qu'il soit écrasé par les feuilles Contenu_*)
+  if (typeof getVLIContent_ === 'function' && !formsData["VLI"]) {
+    formsData["VLI"] = getVLIContent_();
+  }
   
   prop.setProperty("FORMS_JSON", JSON.stringify(formsData));
   
