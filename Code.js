@@ -6,7 +6,7 @@
 // --- CONFIGURATION ---
 const SCRIPT_PROP = PropertiesService.getScriptProperties();
 // Version code utilisée pour invalider le snapshot cache lors d'un déploiement
-const CODE_VERSION = 'v272';
+const CODE_VERSION = 'v273';
 const BOOTSTRAP_SNAPSHOT_KEY = "BOOTSTRAP_SNAPSHOT_V1";
 const PHOTO_PRESENCE_KEY = "PHOTO_PRESENCE_JSON";
 const SHEET_NAMES = {
@@ -247,6 +247,16 @@ function getData() {
       f_["SAC ISP"] = getSacISPContent_();
       SCRIPT_PROP.setProperty("FORMS_JSON", JSON.stringify(f_));
       SCRIPT_PROP.setProperty("INIT_V10_VLI_VEHICLE_CHECK", "1");
+    }
+    // v273: Remove DIO from SAC ISP, remove Tensiometre from both
+    if (!SCRIPT_PROP.getProperty("INIT_V11_SAC_ISP_DIO")) {
+      initVLIContent_();
+      let f11_ = {};
+      const sv11_ = SCRIPT_PROP.getProperty("FORMS_JSON");
+      if (sv11_) try { f11_ = JSON.parse(sv11_); } catch(e) { f11_ = {}; }
+      f11_["SAC ISP"] = getSacISPContent_();
+      SCRIPT_PROP.setProperty("FORMS_JSON", JSON.stringify(f11_));
+      SCRIPT_PROP.setProperty("INIT_V11_SAC_ISP_DIO", "1");
     }
     // Charger les formulaires depuis les feuilles Contenu_* (si la fonction existe)
     if (typeof initializeForms === 'function') {
@@ -1938,7 +1948,6 @@ function getSacISPContent_() {
       { name: "Garrot tourniquet", type: "nombre", def: "1", subsection: "Pochette droite" },
       { name: "Ciseaux Gesko", type: "nombre", def: "1", subsection: "Pochette droite" },
       { name: "Stéthoscope simple pavillon", type: "nombre", def: "1", subsection: "Pochette gauche" },
-      { name: "Tensiomètre adulte et enfant", type: "nombre", def: "1", subsection: "Pochette gauche" },
       { name: "Sonde gastrique n°14", type: "nombre", def: "1", subsection: "Pochette gauche" },
       { name: "Sonde gastrique n°18", type: "nombre", def: "1", subsection: "Pochette gauche" },
       { name: "Seringue gavage 60ml", type: "nombre", def: "1", subsection: "Pochette gauche" },
@@ -2094,7 +2103,6 @@ function getVLIContent_() {
       { name: "Garrot tourniquet", type: "nombre", def: "1", subsection: "Pochette droite" },
       { name: "Ciseaux Gesko", type: "nombre", def: "1", subsection: "Pochette droite" },
       { name: "Stéthoscope simple pavillon", type: "nombre", def: "1", subsection: "Pochette gauche" },
-      { name: "Tensiomètre adulte et enfant", type: "nombre", def: "1", subsection: "Pochette gauche" },
       { name: "Sonde gastrique n°14", type: "nombre", def: "1", subsection: "Pochette gauche" },
       { name: "Sonde gastrique n°18", type: "nombre", def: "1", subsection: "Pochette gauche" },
       { name: "Seringue gavage 60ml", type: "nombre", def: "1", subsection: "Pochette gauche" },
