@@ -1,12 +1,12 @@
 // ******************************************************************************************
 // ****************************** CODE.GS (BACKEND) *****************************************
-// Version 1.14.0 - v270: Fix "Argument trop grand" — chunked bootstrap storage
+// Version 1.15.0 - v272: Tooltip hover items, fix editor save, vehicle check VLI, SAC ISP content
 // ******************************************************************************************
 
 // --- CONFIGURATION ---
 const SCRIPT_PROP = PropertiesService.getScriptProperties();
 // Version code utilisée pour invalider le snapshot cache lors d'un déploiement
-const CODE_VERSION = 'v270';
+const CODE_VERSION = 'v272';
 const BOOTSTRAP_SNAPSHOT_KEY = "BOOTSTRAP_SNAPSHOT_V1";
 const PHOTO_PRESENCE_KEY = "PHOTO_PRESENCE_JSON";
 const SHEET_NAMES = {
@@ -237,6 +237,17 @@ function getData() {
     if (!SCRIPT_PROP.getProperty("INIT_V7_GLOBAL_RED")) { addGlobalRedRecipients_(); SCRIPT_PROP.setProperty("INIT_V7_GLOBAL_RED", "1"); }
     if (!SCRIPT_PROP.getProperty("INIT_V8_VSSO_CAT")) { migrateVssoCategory_(ss); SCRIPT_PROP.setProperty("INIT_V8_VSSO_CAT", "1"); }
     if (!SCRIPT_PROP.getProperty("INIT_V9_VLI_CONTENT")) { initVLIContent_(); SCRIPT_PROP.setProperty("INIT_V9_VLI_CONTENT", "1"); }
+    // Force VLI and SAC ISP content refresh for v272+
+    if (!SCRIPT_PROP.getProperty("INIT_V10_VLI_VEHICLE_CHECK")) {
+      initVLIContent_();
+      // Also refresh SAC ISP in FORMS_JSON
+      let f_ = {};
+      const sv_ = SCRIPT_PROP.getProperty("FORMS_JSON");
+      if (sv_) try { f_ = JSON.parse(sv_); } catch(e) { f_ = {}; }
+      f_["SAC ISP"] = getSacISPContent_();
+      SCRIPT_PROP.setProperty("FORMS_JSON", JSON.stringify(f_));
+      SCRIPT_PROP.setProperty("INIT_V10_VLI_VEHICLE_CHECK", "1");
+    }
     // Charger les formulaires depuis les feuilles Contenu_* (si la fonction existe)
     if (typeof initializeForms === 'function') {
       initializeForms();
@@ -1872,74 +1883,66 @@ function runCleanupNow() {
 
 function getSacISPContent_() {
   return [
-    { section: "Dessus", position: "Dessus du sac", items: [
-      { name: "Ampoulier (1)", type: "case", def: "true" },
-      { name: "Numéro valise ampoulier", type: "texte", def: "" },
-      { name: "Numéro Pharmsap", type: "texte", def: "" },
-      { name: "Fiche de commande (1)", type: "case", def: "true" }
-    ]},
-    { section: "Poche latérale droite — Diagnostic", position: "Latéral droit", items: [
-      { name: "Stéthoscope (1)", type: "case", def: "true" }
-    ]},
-    { section: "Poche latérale droite — Sondage gastrique", position: "Latéral droit", items: [
-      { name: "Sonde gastrique n°14 (1)", type: "case", def: "true" },
-      { name: "Sonde gastrique n°18 (1)", type: "case", def: "true" },
-      { name: "Seringue à gavage 60ml embout conique (1)", type: "case", def: "true" },
-      { name: "Poche à urine (1)", type: "case", def: "true" }
-    ]},
-    { section: "Poche latérale gauche — Hémorragie", position: "Latéral gauche", items: [
-      { name: "Garrot hémorragie (2)", type: "nombre", def: "2" },
-      { name: "Pansement compressif (2)", type: "nombre", def: "2" }
-    ]},
-    { section: "Solutés", position: "Poche principale", items: [
-      { name: "NaCl 0.9% 500ml (1)", type: "case", def: "true" },
-      { name: "Ringer Lactate 500ml (1)", type: "case", def: "true" },
-      { name: "Glucose 5% 500ml (1)", type: "case", def: "true" },
-      { name: "Kit Perfalgan (1)", type: "case", def: "true" },
-      { name: "Kit NaCl 100ml (1)", type: "case", def: "true" },
-      { name: "Kétoprofène 100ml (1)", type: "case", def: "true" },
-      { name: "Glucose 10 250ml (1)", type: "case", def: "true" },
-      { name: "Penthrox (1)", type: "case", def: "true" }
-    ]},
-    { section: "Pochette jaune — Perfusion", position: "Poche principale", items: [
-      { name: "Kit perfusion (1)", type: "case", def: "true" },
-      { name: "Dosette Bétadine alcoolique (1)", type: "case", def: "true" },
-      { name: "Sparadrap (1)", type: "case", def: "true" },
-      { name: "Garrot (1)", type: "case", def: "true" },
-      { name: "Ciseau GESCO (1)", type: "case", def: "true" },
-      { name: "Sachet compresses stériles (1)", type: "case", def: "true" },
-      { name: "Bouchons à perfusion (2)", type: "nombre", def: "2" },
-      { name: "Seringues 10ml (2)", type: "nombre", def: "2" },
-      { name: "Trocards (2)", type: "nombre", def: "2" },
-      { name: "Valves anti-retour (4)", type: "nombre", def: "4" }
-    ]},
-    { section: "Pochette rouge courte — Perfusion", position: "Poche principale", items: [
-      { name: "Kit perfusion (1)", type: "case", def: "true" },
-      { name: "Perfuseur (1)", type: "case", def: "true" },
-      { name: "Opsite (1)", type: "case", def: "true" },
-      { name: "Compresses stériles (2)", type: "nombre", def: "2" }
-    ]},
-    { section: "Pochette rouge longue — Intubation", position: "Poche principale", items: [
-      { name: "Tube laryngé adulte taille 4 (1)", type: "case", def: "true" },
-      { name: "Seringue étalonnée adulte (1)", type: "case", def: "true" },
-      { name: "Cale dents adulte (1)", type: "case", def: "true" },
-      { name: "Tube laryngé enfant taille 2 (1)", type: "case", def: "true" },
-      { name: "Seringue étalonnée enfant (1)", type: "case", def: "true" },
-      { name: "Cale dents enfant (1)", type: "case", def: "true" },
-      { name: "Manche laryngoscope (1)", type: "case", def: "true" },
-      { name: "Lame laryngoscope UU n°3 (1)", type: "case", def: "true" },
-      { name: "Piles de rechange (2)", type: "nombre", def: "2" },
-      { name: "Pince de Magyll (1)", type: "case", def: "true" }
-    ]},
-    { section: "Pochette verte — Ventilation", position: "Poche principale", items: [
-      { name: "Kit aérosol adulte (1)", type: "case", def: "true" },
-      { name: "Kit aérosol enfant (1)", type: "case", def: "true" }
-    ]},
-    { section: "Pochette violette — Hygiène", position: "Poche principale", items: [
-      { name: "Médinette (1)", type: "case", def: "true" },
-      { name: "Gants UU (10)", type: "nombre", def: "10" },
-      { name: "Sacs poubelle (2)", type: "nombre", def: "2" },
-      { name: "Gel SHA (1)", type: "case", def: "true" }
+    { section: "Sac ISP", position: "Sac ISP", items: [
+      { name: "Ampoulier Médicaments", type: "nombre", def: "1", subsection: "" },
+      { name: "Drap UU", type: "nombre", def: "1", subsection: "" },
+      { name: "Perfalgan", type: "nombre", def: "1", subsection: "Intérieur du sac" },
+      { name: "NaCl 100ml", type: "nombre", def: "1", subsection: "Intérieur du sac" },
+      { name: "NaCl 500ml", type: "nombre", def: "1", subsection: "Intérieur du sac" },
+      { name: "Ringer Lactate", type: "nombre", def: "1", subsection: "Intérieur du sac" },
+      { name: "Glucosé 10% 250ml", type: "nombre", def: "1", subsection: "Intérieur du sac" },
+      { name: "Glucosé 5% 500ml", type: "nombre", def: "1", subsection: "Intérieur du sac" },
+      { name: "Garrot", type: "nombre", def: "1", subsection: "Pochette jaune" },
+      { name: "Sparadrap", type: "nombre", def: "1", subsection: "Pochette jaune" },
+      { name: "Kit à perfusion", type: "nombre", def: "1", subsection: "Pochette jaune" },
+      { name: "Paquet de compresses stériles", type: "nombre", def: "1", subsection: "Pochette jaune" },
+      { name: "Bouchons obturateurs", type: "nombre", def: "2", subsection: "Pochette jaune" },
+      { name: "Seringue 10ml", type: "nombre", def: "1", subsection: "Pochette jaune" },
+      { name: "Bétadine alcoolique", type: "nombre", def: "1", subsection: "Pochette jaune" },
+      { name: "Valve anti-retour", type: "nombre", def: "4", subsection: "Pochette jaune" },
+      { name: "Trocards", type: "nombre", def: "2", subsection: "Pochette jaune" },
+      { name: "Gel hydroalcoolique", type: "nombre", def: "1", subsection: "Pochette violette" },
+      { name: "Medinette", type: "nombre", def: "1", subsection: "Pochette violette" },
+      { name: "DASRI", type: "nombre", def: "1", subsection: "Pochette violette" },
+      { name: "Gants UU", type: "nombre", def: "2", subsection: "Pochette violette" },
+      { name: "Sacs poubelles", type: "nombre", def: "2", subsection: "Pochette violette" },
+      { name: "Manche laryngo monté et lame n°4", type: "nombre", def: "1", subsection: "Sacoche bleue" },
+      { name: "Tube laryngé pédiatrique", type: "nombre", def: "1", subsection: "Sacoche bleue" },
+      { name: "Tube laryngé T4", type: "nombre", def: "1", subsection: "Sacoche bleue" },
+      { name: "Piles de rechange", type: "nombre", def: "2", subsection: "Sacoche bleue" },
+      { name: "Cale dents", type: "nombre", def: "1", subsection: "Sacoche bleue" },
+      { name: "Kit allégé", type: "nombre", def: "1", subsection: "Sacoche bleue" },
+      { name: "Pince Magyll", type: "nombre", def: "1", subsection: "Sacoche bleue" },
+      { name: "Perfuseur", type: "nombre", def: "1", subsection: "Pochette rouge" },
+      { name: "Opsite", type: "nombre", def: "1", subsection: "Pochette rouge" },
+      { name: "Compresses stériles", type: "nombre", def: "2", subsection: "Pochette rouge" },
+      { name: "Kit perfusion", type: "nombre", def: "1", subsection: "Pochette rouge" },
+      { name: "Penthrox", type: "nombre", def: "1", subsection: "Pochette verte" },
+      { name: "Aérosol adulte", type: "nombre", def: "1", subsection: "Pochette verte" },
+      { name: "Aérosol enfant", type: "nombre", def: "1", subsection: "Pochette verte" },
+      { name: "Perceuse", type: "nombre", def: "1", subsection: "Sacoche jaune DIO" },
+      { name: "Aiguille rose 15mm", type: "nombre", def: "1", subsection: "Sacoche jaune DIO" },
+      { name: "Aiguille bleue 25mm", type: "nombre", def: "1", subsection: "Sacoche jaune DIO" },
+      { name: "Aiguille jaune 45mm", type: "nombre", def: "1", subsection: "Sacoche jaune DIO" },
+      { name: "NaCl 10ml", type: "nombre", def: "2", subsection: "Sacoche jaune DIO" },
+      { name: "Seringue 20cc", type: "nombre", def: "1", subsection: "Sacoche jaune DIO" },
+      { name: "Trocard", type: "nombre", def: "1", subsection: "Sacoche jaune DIO" },
+      { name: "Manchon compression", type: "nombre", def: "1", subsection: "Sacoche jaune DIO" },
+      { name: "Thermomètre", type: "nombre", def: "1", subsection: "Pochette droite" },
+      { name: "Lecteur glycémie", type: "nombre", def: "1", subsection: "Pochette droite" },
+      { name: "Sucres sachet", type: "nombre", def: "2", subsection: "Pochette droite" },
+      { name: "Lancettes", type: "nombre", def: "10", subsection: "Pochette droite" },
+      { name: "Bandelettes dextro", type: "nombre", def: "10", subsection: "Pochette droite" },
+      { name: "Compresses", type: "nombre", def: "10", subsection: "Pochette droite" },
+      { name: "Pansement hémostatique", type: "nombre", def: "1", subsection: "Pochette droite" },
+      { name: "Garrot tourniquet", type: "nombre", def: "1", subsection: "Pochette droite" },
+      { name: "Ciseaux Gesko", type: "nombre", def: "1", subsection: "Pochette droite" },
+      { name: "Stéthoscope simple pavillon", type: "nombre", def: "1", subsection: "Pochette gauche" },
+      { name: "Tensiomètre adulte et enfant", type: "nombre", def: "1", subsection: "Pochette gauche" },
+      { name: "Sonde gastrique n°14", type: "nombre", def: "1", subsection: "Pochette gauche" },
+      { name: "Sonde gastrique n°18", type: "nombre", def: "1", subsection: "Pochette gauche" },
+      { name: "Seringue gavage 60ml", type: "nombre", def: "1", subsection: "Pochette gauche" },
+      { name: "Poche urine", type: "nombre", def: "1", subsection: "Pochette gauche" }
     ]}
   ];
 }
@@ -2166,6 +2169,10 @@ function getVLIContent_() {
       { name: "Pack Eau", type: "case", def: "true", subsection: "" },
       { name: "Sac isotherme bleu métro", type: "case", def: "true", subsection: "" },
       { name: "Rallonge Maréchal", type: "case", def: "true", subsection: "" }
+    ]},
+    { section: "Vérification du véhicule", position: "Véhicule", items: [
+      { name: "État général vérifié (pneus, carburant, essuie-glaces, ...)", type: "case", def: "false", subsection: "" },
+      { name: "Commentaire état véhicule", type: "texte", def: "", subsection: "" }
     ]}
   ];
 }

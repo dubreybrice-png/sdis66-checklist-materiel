@@ -172,6 +172,12 @@
       /* VLI IMPACT BUTTON */
       .vli-impact-btn { display:inline-block; background:rgba(0,0,0,0.35); padding:4px 10px; border-radius:8px; font-size:0.8rem; cursor:pointer; backdrop-filter:blur(4px); transition:background .2s; margin-top:6px; }
       .vli-impact-btn:hover { background:rgba(0,0,0,0.55); }
+
+      /* ITEM TOOLTIP (last check value) */
+      .form-row { position: relative; }
+      .form-row .item-tooltip { display:none; position:absolute; bottom:100%; left:50%; transform:translateX(-50%); background:#263238; color:#fff; padding:6px 12px; border-radius:6px; font-size:0.78rem; white-space:nowrap; z-index:50; box-shadow:0 3px 12px rgba(0,0,0,.3); pointer-events:none; line-height:1.5; max-width:320px; white-space:normal; text-align:center; }
+      .form-row .item-tooltip::after { content:''; position:absolute; top:100%; left:50%; transform:translateX(-50%); border:6px solid transparent; border-top-color:#263238; }
+      .form-row:hover .item-tooltip { display:block; }
     </style>
   </head>
   <body>
@@ -665,6 +671,34 @@
         renderAdmin(); renderStats(); renderEditor();
       }
 
+      function getLastCheckData(bagName) {
+        if (!D || !D.history) return null;
+        for (var i = 0; i < D.history.length; i++) {
+          var h = D.history[i];
+          if (h.name === bagName) {
+            var detailsClean = (h.details || '');
+            detailsClean = detailsClean.replace(/\s*\[⏱️\s*\d+min\d+s\]/, '');
+            var parts = detailsClean.split(' || ');
+            var primary = parts[0] || '';
+            var values = {};
+            if (primary.startsWith('{')) {
+              try { values = JSON.parse(primary); } catch(e) {}
+            }
+            return { values: values, verifier: h.verifier || '?', dateStr: h.dateStr || '?' };
+          }
+        }
+        return null;
+      }
+
+      function mkTooltip(itemName, lastCheck) {
+        if (!lastCheck) return '<span class="item-tooltip">Aucune vérification précédente</span>';
+        var val = lastCheck.values[itemName];
+        if (val === undefined || val === null) val = '—';
+        return '<span class="item-tooltip">Dernière : <b>' + escH(String(val)) + '</b><br>Par ' + escH(lastCheck.verifier) + ' — ' + escH(lastCheck.dateStr) + '</span>';
+      }
+
+      function escH(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
       function openCheck(item) {
         CURR = item; 
         MODAL_OPEN_TIME = Date.now(); // Enregistrer le timestamp d'ouverture
@@ -677,6 +711,7 @@
         document.getElementById('extra-fields').style.display = D.options.enableExpiry ? 'block' : 'none';
         document.getElementById('verif-field').style.display = D.options.enableVerifier ? 'block' : 'none';
         const b = document.getElementById('m-body'); b.innerHTML = "";
+        const lastCheck = getLastCheckData(item.name);
         const formKey = item.category;
         if(D.forms && D.forms[formKey]) {
            D.forms[formKey].forEach((sec, secIdx) => {
@@ -710,7 +745,7 @@
                  else if (it.type == 'date') f = `<div class="form-input-container"><input type="date" data-id="${it.name}" data-def="${d}" value="${d}"></div>`;
                  else if (it.type == 'nombre') f = `<div class="form-input-container"><input type="number" data-id="${it.name}" data-def="${d}" placeholder="${d}"></div>`;
                  else f = `<div class="form-input-container"><input type="text" data-id="${it.name}" data-def="${d}" placeholder="${d}"></div>`;
-                 h += `<div class="form-row"><label>${it.name}</label>${f}</div>`;
+                 h += `<div class="form-row">${mkTooltip(it.name, lastCheck)}<label>${it.name}</label>${f}</div>`;
                  // Fermer le groupe si le prochain item a une sous-section différente ou si c'est le dernier
                  if (inSubGroup && (nextSub !== curSub)) {
                    h += '</div>';
@@ -1532,7 +1567,19 @@
                data.push({ section: s, position: p, item: inputs[0].value, type: row.querySelector('select').value, def: inputs[1].value, subsection: inputs[2] ? inputs[2].value : '' });
             });
          });
-         google.script.run.withSuccessHandler(loadData).updateCategoryContent(cat, data);
+         google.script.run
+           .withSuccessHandler(function() {
+              var es = document.getElementById('editor-status');
+              if (es && editorSaving) { es.style.color='#4caf50'; es.textContent='✅ Enregistré !'; editorSaving=false; setTimeout(function(){ if(es) es.textContent=''; }, 3000); }
+              loadData();
+           })
+           .withFailureHandler(function(e) {
+              var es = document.getElementById('editor-status');
+              if (es) { es.style.color='#c62828'; es.textContent='❌ Erreur : ' + (e.message||e); }
+              editorSaving=false;
+              document.getElementById('global-loader').style.display='none';
+           })
+           .updateCategoryContent(cat, data);
       }
       
       function addItem(b) { b.parentElement.previousElementSibling.innerHTML += `<div class="item-row"><span style="cursor:move; color:#999;">⋮⋮</span><input placeholder="Item" style="flex:1;"><select><option value="texte">Texte</option><option value="case">Case</option><option value="nombre">Nombre</option><option value="date">Date</option></select><input placeholder="Défaut" style="width:80px;"><input placeholder="Sous-section" style="width:110px;"><button class="admin-btn danger" style="padding:5px 8px;" onclick="this.parentElement.remove()">✕</button><button class="admin-btn secondary" style="padding:5px 8px;" onclick="quickSaveEditor()">💾</button></div>`; }
