@@ -1,12 +1,12 @@
 // ******************************************************************************************
 // ****************************** CODE.GS (BACKEND) *****************************************
-// Version 1.13.1 - déploiement v269: VSSO catégorie séparée, corrections VLI et cache
+// Version 1.14.0 - v270: Fix "Argument trop grand" — chunked bootstrap storage
 // ******************************************************************************************
 
 // --- CONFIGURATION ---
 const SCRIPT_PROP = PropertiesService.getScriptProperties();
 // Version code utilisée pour invalider le snapshot cache lors d'un déploiement
-const CODE_VERSION = 'v269';
+const CODE_VERSION = 'v270';
 const BOOTSTRAP_SNAPSHOT_KEY = "BOOTSTRAP_SNAPSHOT_V1";
 const PHOTO_PRESENCE_KEY = "PHOTO_PRESENCE_JSON";
 const SHEET_NAMES = {
@@ -39,31 +39,139 @@ function getAppUrl() {
   return ScriptApp.getService().getUrl();
 }
 
-// --- BOOTSTRAP (data + photos + mileages) with short cache ---
+// --- BOOTSTRAP (data + photos + mileages) with chunked cache ---
+// PropertiesService: 9KB/value limit → chunk across multiple keys
+// CacheService: 100KB/value limit → chunk if needed, 300s TTL
+
+var CHUNK_SIZE_PROP = 8000;   // ~8KB per property chunk (safe under 9KB)
+var CHUNK_SIZE_CACHE = 90000; // ~90KB per cache chunk (safe under 100KB)
+var CACHE_TTL = 300;          // 5 minutes
+
+function setChunkedProp_(baseKey, jsonStr) {
+  try {
+    var chunks = [];
+    for (var i = 0; i < jsonStr.length; i += CHUNK_SIZE_PROP) {
+      chunks.push(jsonStr.substring(i, i + CHUNK_SIZE_PROP));
+    }
+    // Delete old chunks first (up to 50 possible old ones)
+    for (var c = 0; c < 50; c++) {
+      var k = baseKey + '_' + c;
+      if (!SCRIPT_PROP.getProperty(k)) break;
+      SCRIPT_PROP.deleteProperty(k);
+    }
+    SCRIPT_PROP.setProperty(baseKey + '_N', String(chunks.length));
+    for (var c = 0; c < chunks.length; c++) {
+      SCRIPT_PROP.setProperty(baseKey + '_' + c, chunks[c]);
+    }
+  } catch(e) {
+    Logger.log('setChunkedProp_ error (non-fatal): ' + e);
+  }
+}
+
+function getChunkedProp_(baseKey) {
+  try {
+    var n = parseInt(SCRIPT_PROP.getProperty(baseKey + '_N') || '0');
+    if (!n) return null;
+    var str = '';
+    for (var c = 0; c < n; c++) {
+      var part = SCRIPT_PROP.getProperty(baseKey + '_' + c);
+      if (part === null) return null;
+      str += part;
+    }
+    return str;
+  } catch(e) {
+    Logger.log('getChunkedProp_ error: ' + e);
+    return null;
+  }
+}
+
+function deleteChunkedProp_(baseKey) {
+  try {
+    var n = parseInt(SCRIPT_PROP.getProperty(baseKey + '_N') || '0');
+    for (var c = 0; c < Math.max(n, 50); c++) {
+      var k = baseKey + '_' + c;
+      if (!SCRIPT_PROP.getProperty(k) && c >= n) break;
+      try { SCRIPT_PROP.deleteProperty(k); } catch(e) {}
+    }
+    try { SCRIPT_PROP.deleteProperty(baseKey + '_N'); } catch(e) {}
+  } catch(e) {}
+}
+
+function setChunkedCache_(cache, baseKey, jsonStr, ttl) {
+  try {
+    if (jsonStr.length <= CHUNK_SIZE_CACHE) {
+      cache.put(baseKey, jsonStr, ttl);
+      cache.put(baseKey + '_N', '1', ttl);
+    } else {
+      var chunks = [];
+      for (var i = 0; i < jsonStr.length; i += CHUNK_SIZE_CACHE) {
+        chunks.push(jsonStr.substring(i, i + CHUNK_SIZE_CACHE));
+      }
+      cache.put(baseKey + '_N', String(chunks.length), ttl);
+      for (var c = 0; c < chunks.length; c++) {
+        cache.put(baseKey + '_C' + c, chunks[c], ttl);
+      }
+      // Also put a marker so single get fails gracefully
+      cache.remove(baseKey);
+    }
+  } catch(e) {
+    Logger.log('setChunkedCache_ error (non-fatal): ' + e);
+  }
+}
+
+function getChunkedCache_(cache, baseKey) {
+  try {
+    var nStr = cache.get(baseKey + '_N');
+    if (nStr === '1') {
+      return cache.get(baseKey);
+    }
+    var n = parseInt(nStr || '0');
+    if (!n) {
+      // Fallback: try single value (old format)
+      return cache.get(baseKey);
+    }
+    var str = '';
+    for (var c = 0; c < n; c++) {
+      var part = cache.get(baseKey + '_C' + c);
+      if (part === null) return null; // partial miss
+      str += part;
+    }
+    return str;
+  } catch(e) {
+    return null;
+  }
+}
+
 function getBootstrapData() {
   const cache = CacheService.getScriptCache();
-  // If code version changed since last snapshot, force rebuild to avoid serving stale forms/status
+  // If code version changed since last snapshot, force rebuild
   try {
     const propVersion = SCRIPT_PROP.getProperty('CODE_VERSION') || '';
     if (propVersion !== CODE_VERSION) {
       cache.remove("BOOTSTRAP_V1");
+      cache.remove("BOOTSTRAP_V1_N");
+      deleteChunkedProp_(BOOTSTRAP_SNAPSHOT_KEY);
+      // Also delete old non-chunked key if it exists
       try { SCRIPT_PROP.deleteProperty(BOOTSTRAP_SNAPSHOT_KEY); } catch(e) {}
       SCRIPT_PROP.setProperty('CODE_VERSION', CODE_VERSION);
       Logger.log('CODE_VERSION mismatch — forcing bootstrap snapshot rebuild.');
     }
   } catch(e) { Logger.log('Error checking CODE_VERSION: ' + e); }
 
-  const cached = cache.get("BOOTSTRAP_V1");
+  const cached = getChunkedCache_(cache, "BOOTSTRAP_V1");
   if (cached) return JSON.parse(cached);
 
-  const snap = SCRIPT_PROP.getProperty(BOOTSTRAP_SNAPSHOT_KEY);
+  const snap = getChunkedProp_(BOOTSTRAP_SNAPSHOT_KEY);
   if (snap) {
-    cache.put("BOOTSTRAP_V1", snap, 5);
+    setChunkedCache_(cache, "BOOTSTRAP_V1", snap, CACHE_TTL);
     return JSON.parse(snap);
   }
 
   const payload = rebuildBootstrapSnapshot_();
-  if (payload) cache.put("BOOTSTRAP_V1", JSON.stringify(payload), 5);
+  if (payload) {
+    var jsonStr = JSON.stringify(payload);
+    setChunkedCache_(cache, "BOOTSTRAP_V1", jsonStr, CACHE_TTL);
+  }
   return payload;
 }
 
@@ -76,7 +184,7 @@ function rebuildBootstrapSnapshot_() {
     photoPresence: getPhotoPresenceMap(),
     vliMileages: getAllVliMileages()
   };
-  SCRIPT_PROP.setProperty(BOOTSTRAP_SNAPSHOT_KEY, JSON.stringify(payload));
+  setChunkedProp_(BOOTSTRAP_SNAPSHOT_KEY, JSON.stringify(payload));
   return payload;
 }
 
@@ -1631,7 +1739,11 @@ function saveVliMileage(bagName, km, dateStr) {
 
 function invalidateCache_() {
   try {
-    CacheService.getScriptCache().remove("BOOTSTRAP_V1");
+    var cache = CacheService.getScriptCache();
+    cache.remove("BOOTSTRAP_V1");
+    cache.remove("BOOTSTRAP_V1_N");
+    // Remove any chunked cache entries
+    for (var c = 0; c < 20; c++) { try { cache.remove("BOOTSTRAP_V1_C" + c); } catch(e) {} }
     rebuildBootstrapSnapshot_();
   } catch (e) {
     Logger.log("Cache invalidate error: " + e.toString());
