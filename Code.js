@@ -6,7 +6,7 @@
 // --- CONFIGURATION ---
 const SCRIPT_PROP = PropertiesService.getScriptProperties();
 // Version code utilisée pour invalider le snapshot cache lors d'un déploiement
-const CODE_VERSION = 'v273';
+const CODE_VERSION = 'v275';
 const BOOTSTRAP_SNAPSHOT_KEY = "BOOTSTRAP_SNAPSHOT_V1";
 const PHOTO_PRESENCE_KEY = "PHOTO_PRESENCE_JSON";
 const SHEET_NAMES = {
