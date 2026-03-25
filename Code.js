@@ -265,6 +265,7 @@ function getData() {
       const sv12_ = SCRIPT_PROP.getProperty("FORMS_JSON");
       if (sv12_) try { f12_ = JSON.parse(sv12_); } catch(e) { f12_ = {}; }
       f12_["SAC ISP"] = getSacISPContent_();
+      f12_["SAC RESERVE"] = getSacReserveContent_();
       SCRIPT_PROP.setProperty("FORMS_JSON", JSON.stringify(f12_));
       SCRIPT_PROP.setProperty("INIT_V12_VLI_SAC_ISP_UPDATE", "1");
     }
@@ -1191,41 +1192,75 @@ function checkDailyAlerts() {
   
   const inv = data.data.inventory;
   const conf = data.data.mailConfig;
+  const appUrl = ScriptApp.getService().getUrl();
+  
+  // Charger l'état des mails déjà envoyés (évite les doublons quotidiens)
+  let sentState = {};
+  try { sentState = JSON.parse(SCRIPT_PROP.getProperty("MAIL_SENT_STATE") || "{}"); } catch(e) { sentState = {}; }
+  let stateChanged = false;
   
   inv.forEach(item => {
     if(item.state === 'HS') return;
+    
+    const key = item.name;
+    const prev = sentState[key] || "";
+    // prev = "" (jamais envoyé), "orange" (prévenu), "red" (expiré envoyé)
     
     let sendMail = false;
     let subject = "";
     let body = "";
     let recipient = "";
+    let newState = prev;
     
     if(item.status === 'red' || item.status === 'purple') {
-      const GLOBAL_RED = "brice.dubrey@sdis66.fr,florian.bois@sdis66.fr";
-      let allRecipients = item.mailRed ? item.mailRed.replace(/;/g, ",").trim() : "";
-      if (allRecipients) allRecipients += "," + GLOBAL_RED;
-      else allRecipients = GLOBAL_RED;
-      recipient = allRecipients;
-      subject = conf.redSub || "ALERTE ROUGE";
-      body = conf.redBody || "Matériel périmé.";
-      sendMail = true;
+      // Envoyer le mail rouge UNE SEULE FOIS (quand on passe de orange/rien à red)
+      if (prev !== 'red') {
+        const GLOBAL_RED = "brice.dubrey@sdis66.fr,florian.bois@sdis66.fr";
+        let allRecipients = item.mailRed ? item.mailRed.replace(/;/g, ",").trim() : "";
+        if (allRecipients) allRecipients += "," + GLOBAL_RED;
+        else allRecipients = GLOBAL_RED;
+        recipient = allRecipients;
+        subject = conf.redSub || "ALERTE ROUGE";
+        body = conf.redBody || "Matériel périmé.";
+        sendMail = true;
+        newState = 'red';
+      }
     }
     else if(item.status === 'orange') {
-      if(item.mailOrange) {
-        recipient = item.mailOrange;
-        subject = conf.orangeSub || "ALERTE ORANGE";
-        body = conf.orangeBody || "Matériel bientot périmé.";
-        sendMail = true;
+      // Envoyer le mail orange UNE SEULE FOIS
+      if (prev !== 'orange' && prev !== 'red') {
+        if(item.mailOrange) {
+          recipient = item.mailOrange;
+          subject = conf.orangeSub || "ALERTE ORANGE";
+          body = conf.orangeBody || "Matériel bientot périmé.";
+          sendMail = true;
+          newState = 'orange';
+        }
       }
+    }
+    else if(item.status === 'green') {
+      // Retour au vert → réinitialiser l'état pour les prochains cycles
+      if (prev) { newState = ''; stateChanged = true; }
+    }
+    
+    if (newState !== prev) {
+      sentState[key] = newState || undefined;
+      if (!newState) delete sentState[key];
+      stateChanged = true;
     }
     
     if(sendMail && recipient) {
       body = body.replace(/{nom}/g, item.name)
                  .replace(/{categorie}/g, item.category)
-                 .replace(/{date}/g, item.lastDate)
+                 .replace(/{date}/g, item.nextDate)
                  .replace(/{echeance}/g, item.nextDate);
       
       subject = subject.replace(/{nom}/g, item.name);
+      
+      // Ajouter le lien et la phrase d'information
+      const bagLink = appUrl + "?bag=" + encodeURIComponent(item.name);
+      body += "\n\nVous pouvez effectuer la traçabilité sur l'application SSSM dans l'onglet Menu > Vérification.";
+      body += "\nAccès direct : " + bagLink;
       
       // Convertir les ; en , pour MailApp et dédupliquer
       const cleanRecipient = [...new Set(recipient.replace(/;/g, ",").split(",").map(e => e.trim()).filter(e => e))].join(",");
@@ -1237,6 +1272,11 @@ function checkDailyAlerts() {
       }
     }
   });
+  
+  // Sauvegarder l'état des mails envoyés
+  if (stateChanged) {
+    SCRIPT_PROP.setProperty("MAIL_SENT_STATE", JSON.stringify(sentState));
+  }
 }
 
 // ===================================================================
@@ -1936,14 +1976,6 @@ function getSacISPContent_() {
       { name: "Pince Magyll", type: "nombre", def: "1", subsection: "Sacoche rouge" },
       { name: "Aérosol adulte", type: "nombre", def: "1", subsection: "Pochette verte" },
       { name: "Aérosol enfant", type: "nombre", def: "1", subsection: "Pochette verte" },
-      { name: "Perceuse", type: "nombre", def: "1", subsection: "Sacoche jaune DIO" },
-      { name: "Aiguille rose 15mm", type: "nombre", def: "1", subsection: "Sacoche jaune DIO" },
-      { name: "Aiguille bleue 25mm", type: "nombre", def: "1", subsection: "Sacoche jaune DIO" },
-      { name: "Aiguille jaune 45mm", type: "nombre", def: "1", subsection: "Sacoche jaune DIO" },
-      { name: "NaCl 10ml / seringue préremplie", type: "nombre", def: "2", subsection: "Sacoche jaune DIO" },
-      { name: "Seringue 20cc", type: "nombre", def: "1", subsection: "Sacoche jaune DIO" },
-      { name: "Trocard", type: "nombre", def: "1", subsection: "Sacoche jaune DIO" },
-      { name: "Manchon compression", type: "nombre", def: "1", subsection: "Sacoche jaune DIO" },
       { name: "Kit hémorragie", type: "nombre", def: "2", subsection: "Pochette droite" },
       { name: "Stéthoscope simple pavillon", type: "nombre", def: "1", subsection: "Pochette gauche" },
       { name: "Sonde gastrique n°14", type: "nombre", def: "1", subsection: "Pochette gauche" },
@@ -1956,35 +1988,20 @@ function getSacISPContent_() {
 
 function getSacReserveContent_() {
   return [
-    { section: "Solutés", position: "Poche principale", items: [
-      { name: "Kit Perfusion (4)", type: "nombre", def: "4" },
-      { name: "NaCl 0.9% 500ml (4)", type: "nombre", def: "4" },
-      { name: "Kit Perfalgan (4)", type: "nombre", def: "4" },
-      { name: "Kit NaCl 100ml (4)", type: "nombre", def: "4" },
-      { name: "Kétoprofène 100ml (2)", type: "nombre", def: "2" },
-      { name: "Glucose 10% 250ml (2)", type: "nombre", def: "2" },
-      { name: "Ringer Lactate 500ml (1)", type: "case", def: "true" },
-      { name: "Glucose 5% 500ml (1)", type: "case", def: "true" },
-      { name: "Penthrox (1)", type: "case", def: "true" }
-    ]},
-    { section: "Pochette rouge longue — Intubation", position: "Poche principale", items: [
-      { name: "Tube laryngé adulte taille 4 (1)", type: "case", def: "true" },
-      { name: "Seringue étalonnée (1)", type: "case", def: "true" },
-      { name: "Cale dents (1)", type: "case", def: "true" },
-      { name: "Lame laryngoscope UU n°3 (1)", type: "case", def: "true" }
-    ]},
-    { section: "Poche latérale droite", position: "Latéral droit", items: [
-      { name: "Perfuseur 3 voies (1)", type: "case", def: "true" },
-      { name: "Bouchons (2)", type: "nombre", def: "2" },
-      { name: "Seringues 10ml (2)", type: "nombre", def: "2" },
-      { name: "Trocards (2)", type: "nombre", def: "2" },
-      { name: "Valves anti-retour (2)", type: "nombre", def: "2" },
-      { name: "Opsite (1)", type: "case", def: "true" },
-      { name: "DASRI Médinette (1)", type: "case", def: "true" }
-    ]},
-    { section: "Poche latérale gauche — Aérosols", position: "Latéral gauche", items: [
-      { name: "Kit aérosol adulte (2)", type: "nombre", def: "2" },
-      { name: "Kit aérosol enfant (1)", type: "case", def: "true" }
+    { section: "Sac Réserve", position: "Sac Réserve", items: [
+      { name: "Kit perfusion", type: "nombre", def: "4", subsection: "" },
+      { name: "Kit perfalgan", type: "nombre", def: "4", subsection: "" },
+      { name: "NaCl 100ml", type: "nombre", def: "4", subsection: "" },
+      { name: "NaCl 500ml", type: "nombre", def: "4", subsection: "" },
+      { name: "Kit aérosol adulte", type: "nombre", def: "2", subsection: "" },
+      { name: "Kit aérosol enfant", type: "nombre", def: "1", subsection: "" },
+      { name: "Penthrox", type: "nombre", def: "1", subsection: "" },
+      { name: "Drap UU", type: "nombre", def: "1", subsection: "" },
+      { name: "Ringer Lactate", type: "nombre", def: "1", subsection: "" },
+      { name: "Glucosé 10% 250ml", type: "nombre", def: "2", subsection: "" },
+      { name: "Glucosé 5% 500ml", type: "nombre", def: "1", subsection: "" },
+      { name: "Medinette", type: "nombre", def: "1", subsection: "" },
+      { name: "Pochette petit matériel (2 valves anti retour; 2 seringue 10cc, 2 trocards, 2 bouchons, 1 perfuseur, 1 opsite)", type: "nombre", def: "1", subsection: "" }
     ]}
   ];
 }
